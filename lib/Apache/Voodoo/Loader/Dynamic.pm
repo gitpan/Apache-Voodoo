@@ -1,7 +1,7 @@
-# $Id: Dynamic.pm 1482 2005-02-11 21:37:25Z medwards $
+# $Id: Dynamic.pm 1488 2005-02-14 00:06:27Z medwards $
 package Apache::Voodoo::Loader::Dynamic;
 
-$VERSION = '1.11';
+$VERSION = '1.12';
 
 use strict;
 use base("Apache::Voodoo::Loader");

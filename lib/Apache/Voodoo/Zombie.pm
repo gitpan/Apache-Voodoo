@@ -6,7 +6,7 @@ Apache::Voodoo::Zombie - Internal module used by Voodoo when a end user module d
 
 =head1 VERSION
 
-$Id: Zombie.pm 1482 2005-02-11 21:37:25Z medwards $
+$Id: Zombie.pm 1488 2005-02-14 00:06:27Z medwards $
 
 =head1 SYNOPSIS
 
@@ -19,7 +19,7 @@ production server :)
 =cut ################################################################################
 package Apache::Voodoo::Zombie;
 
-$VERSION = '1.11';
+$VERSION = '1.12';
 
 use strict;
 

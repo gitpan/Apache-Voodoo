@@ -2,7 +2,7 @@
 
 =head1 Apache::Voodoo::Theme
 
-$Id: Theme.pm 1482 2005-02-11 21:37:25Z medwards $
+$Id: Theme.pm 1488 2005-02-14 00:06:27Z medwards $
 
 =head1 Initial Coding: Maverick
 
@@ -14,7 +14,7 @@ This implements a post_include module that handles all the theme processing.
 
 package Apache::Voodoo::Theme;
 
-$VERSION = '1.11';
+$VERSION = '1.12';
 
 use strict;
 

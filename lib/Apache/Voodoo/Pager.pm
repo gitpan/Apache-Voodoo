@@ -6,7 +6,7 @@ Apache::Voodoo::Pager - Provides generic pagination controls
 
 =head1 VERSION
 
-$Id: Pager.pm 1482 2005-02-11 21:37:25Z medwards $
+$Id: Pager.pm 1488 2005-02-14 00:06:27Z medwards $
 
 =head1 SYNOPSIS
 
@@ -29,7 +29,7 @@ any scenario where data must be paginated.
 =cut ################################################################################
 package Apache::Voodoo::Pager;
 
-$VERSION = '1.11';
+$VERSION = '1.12';
 
 use strict;
 use POSIX qw(ceil);

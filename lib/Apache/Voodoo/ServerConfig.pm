@@ -2,7 +2,7 @@
 
 =head1 Apache::Voodoo::ServerConfig
 
-$Id: ServerConfig.pm 1482 2005-02-11 21:37:25Z medwards $
+$Id: ServerConfig.pm 1488 2005-02-14 00:06:27Z medwards $
 
 =head1 Initial Coding: Maverick
 
@@ -12,7 +12,7 @@ This handles all of the config file parsing and module loading.
 
 package Apache::Voodoo::ServerConfig;
 
-$VERSION = '1.11';
+$VERSION = '1.12';
 
 use strict;
 use Config::General;

@@ -2,7 +2,7 @@
 
 =head1 Apache::Voodoo::Loader
 
-$Id: Loader.pm 1482 2005-02-11 21:37:25Z medwards $
+$Id: Loader.pm 1488 2005-02-14 00:06:27Z medwards $
 
 =head1 Initial Coding: Maverick
 
@@ -13,7 +13,7 @@ and Loader::Dynamic
 
 package Apache::Voodoo::Loader;
 
-$VERSION = '1.11';
+$VERSION = '1.12';
 
 use strict;
 
