@@ -1,8 +1,8 @@
-#####################################################################################
+=pod #####################################################################################
 
 =head1 Apache::Voodoo::ServerConfig
 
-$Id: ServerConfig.pm 1468 2005-02-10 15:51:43Z medwards $
+$Id: ServerConfig.pm 1482 2005-02-11 21:37:25Z medwards $
 
 =head1 Initial Coding: Maverick
 
@@ -11,6 +11,8 @@ This handles all of the config file parsing and module loading.
 =cut ################################################################################
 
 package Apache::Voodoo::ServerConfig;
+
+$VERSION = '1.11';
 
 use strict;
 use Config::General;

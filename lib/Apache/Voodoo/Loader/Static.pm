@@ -1,5 +1,8 @@
-# $Id: Static.pm 1468 2005-02-10 15:51:43Z medwards $
+# $Id: Static.pm 1482 2005-02-11 21:37:25Z medwards $
 package Apache::Voodoo::Loader::Static;
+
+$VERSION = '1.11';
+
 use strict;
 use base("Apache::Voodoo::Loader");
 

@@ -1,4 +1,4 @@
-#####################################################################################
+=pod #####################################################################################
 
 =head1 NAME
 
@@ -6,7 +6,7 @@ Apache::Voodoo::Zombie - Internal module used by Voodoo when a end user module d
 
 =head1 VERSION
 
-$Id: Zombie.pm 1468 2005-02-10 15:51:43Z medwards $
+$Id: Zombie.pm 1482 2005-02-11 21:37:25Z medwards $
 
 =head1 SYNOPSIS
 
@@ -18,6 +18,8 @@ production server :)
 
 =cut ################################################################################
 package Apache::Voodoo::Zombie;
+
+$VERSION = '1.11';
 
 use strict;
 

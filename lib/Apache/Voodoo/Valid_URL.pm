@@ -1,5 +1,7 @@
 package Apache::Voodoo::Valid_URL;
 
+$VERSION = '1.11';
+
 use strict;
 
 # Be paranoid about using grouping!

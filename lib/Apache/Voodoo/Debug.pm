@@ -1,17 +1,17 @@
-################################################################################
+=pod ################################################################################
 
 =head1 NAME
 
-Apache::Voodoo
+Apache::Voodoo::Debug - handles operations associated with debugging output.
 
 =head1 VERSION
 
-$Id: Debug.pm 1468 2005-02-10 15:51:43Z medwards $
+$Id: Debug.pm 1482 2005-02-11 21:37:25Z medwards $
 
 =head1 SYNOPSIS
 
 This object is used by Voodoo internally to handling various types of debugging
-information and to produce and end user display of that information.  End users 
+information and to produce end user display of that information.  End users 
 never interact with this module directly, instead they use the debug() and mark()
 methods from L<Apache::Voodoo>
 
@@ -19,6 +19,8 @@ methods from L<Apache::Voodoo>
 
 =cut ###########################################################################
 package Apache::Voodoo::Debug;
+
+$VERSION = '1.11';
 
 use strict;
 use Time::HiRes;

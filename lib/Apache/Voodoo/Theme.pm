@@ -1,8 +1,8 @@
-#####################################################################################
+=pod #####################################################################################
 
 =head1 Apache::Voodoo::Theme
 
-$Id: Theme.pm 1468 2005-02-10 15:51:43Z medwards $
+$Id: Theme.pm 1482 2005-02-11 21:37:25Z medwards $
 
 =head1 Initial Coding: Maverick
 
@@ -13,6 +13,9 @@ This implements a post_include module that handles all the theme processing.
 =cut ################################################################################
 
 package Apache::Voodoo::Theme;
+
+$VERSION = '1.11';
+
 use strict;
 
 use Data::Dumper;

@@ -1,4 +1,4 @@
-#####################################################################################
+=pod #####################################################################################
 
 =head1 NAME
 
@@ -6,7 +6,7 @@ Apache::Voodoo::DisplayError
 
 =head1 VERSION
 
-$Id: DisplayError.pm 1468 2005-02-10 15:51:43Z medwards $
+$Id: DisplayError.pm 1482 2005-02-11 21:37:25Z medwards $
 
 =head1 SYNOPSIS
 
@@ -16,6 +16,8 @@ user interaction is through L<Apache::Voodoo>::display_error()
 =cut ################################################################################
 
 package Apache::Voodoo::DisplayError;
+
+$VERSION = '1.11';
 
 use strict;
 use base ("Apache::Voodoo");

@@ -1,4 +1,4 @@
-#####################################################################################
+=pod #####################################################################################
 
 =head1 NAME
 
@@ -6,11 +6,13 @@ Apache::Voodoo::Table - framework to handle common database operations
 
 =head1 VERSION
 
-$Id: Table.pm 1468 2005-02-10 15:51:43Z medwards $
+$Id: Table.pm 1482 2005-02-11 21:37:25Z medwards $
 
 =cut ################################################################################
 
 package Apache::Voodoo::Table;
+
+$VERSION = '1.11';
 
 use strict;
 
