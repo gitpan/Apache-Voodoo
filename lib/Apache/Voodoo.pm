@@ -2,7 +2,7 @@
 #
 # Apache::Voodoo - Base class for all Voodoo page handling modules
 #
-# $Id: Voodoo.pm 1488 2005-02-14 00:06:27Z medwards $
+# $Id: Voodoo.pm 2597 2005-09-15 16:33:41Z medwards $
 # 
 # This is the object that your modules must inherit from in order to interact correctly
 # with Voodoo.  It also provides a set of extremely useful methods.
@@ -10,7 +10,7 @@
 ####################################################################################
 package Apache::Voodoo;
 
-$VERSION = '1.12';
+$VERSION = '1.13';
 
 use strict;
 use Data::Dumper;
@@ -53,7 +53,9 @@ sub debug {
 sub mark {
 	my $self = shift;
 
-	$Apache::Voodoo::Handler::debug->mark(@_);
+	if (defined($Apache::Voodoo::Handler::debug)) {
+		$Apache::Voodoo::Handler::debug->mark(@_);
+	}
 }
 
 ################################################################################
@@ -312,7 +314,7 @@ sub mysql_timestamp {
         my @p = localtime($time || time); 
  
         $time =~ /^\d+\.(\d+)$/; 
-        return sprintf("%04d%02d%02d%02d%02d%02d",$p[5]+1900,$p[4]+1, $p[3],$p[3], $p[2], $p[1]);
+        return sprintf("%04d%02d%02d%02d%02d%02d",$p[5]+1900,$p[4]+1,$p[3],$p[2],$p[1],$p[0]);
 }
 
 sub sql_to_date {
@@ -514,7 +516,7 @@ sub pretty_time {
 	my @p = localtime($time || time);
 
 	$time =~ /^\d+\.(\d+)$/;
-	return sprintf("%02d/%02d/%04d %02d:%02d:%02d ",$p[4]+1, $p[3], $p[5]+1900, $p[3], $p[2], $p[1]) . $1;
+	return sprintf("%02d/%02d/%04d %02d:%02d:%02d",$p[4]+1, $p[3], $p[5]+1900, $p[3], $p[2], $p[1]) . $1;
 }
 
 

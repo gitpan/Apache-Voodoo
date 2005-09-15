@@ -6,7 +6,7 @@ Apache::Voodoo::Pager - Provides generic pagination controls
 
 =head1 VERSION
 
-$Id: Pager.pm 1488 2005-02-14 00:06:27Z medwards $
+$Id: Pager.pm 2597 2005-09-15 16:33:41Z medwards $
 
 =head1 SYNOPSIS
 
@@ -29,7 +29,7 @@ any scenario where data must be paginated.
 =cut ################################################################################
 package Apache::Voodoo::Pager;
 
-$VERSION = '1.12';
+$VERSION = '1.13';
 
 use strict;
 use POSIX qw(ceil);
@@ -92,6 +92,7 @@ sub paginate {
 		else {
 			if ($res_count < $self->{'limit'}) {
 				$output{'MODE_PARAMS'} .= "&showall=1";
+				$output{'SHOW_MODE'} = 1;
 			}
 
 			# setup the page list

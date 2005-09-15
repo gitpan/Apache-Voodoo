@@ -6,7 +6,7 @@ Apache::Voodoo::Handler - Main interface between mod_perl and Voodoo
 
 =head1 VERSION
 
-$Id: Handler.pm 1488 2005-02-14 00:06:27Z medwards $
+$Id: Handler.pm 2597 2005-09-15 16:33:41Z medwards $
 
 =head1 SYNOPSIS
  
@@ -17,13 +17,13 @@ application's page handling modules.
 =cut ################################################################################
 package Apache::Voodoo::Handler;
 
-$VERSION = '1.12';
+$VERSION = '1.13';
 
 use strict;
-use warnings;
 
 use Apache;
 use Apache::Constants qw(:response M_GET);
+use Apache::Request;
 use Apache::Session::File;
 
 use Apache::DBI;	
@@ -54,9 +54,23 @@ my %session;
 # myself that this is STDERR on god's own steroids so I can sleep at night.
 our $debug = Apache::Voodoo::Debug->new();
 
-$Apache::Voodoo::Handler = bless {};
+$Apache::Voodoo::Handler = Apache::Voodoo::Handler->new();
 
-sub handle($$) {
+sub new {
+	my $class = shift;
+	my $self = {@_};
+	bless $self, $class;
+
+	if (exists $ENV{'MOD_PERL'}) {
+		# let's us do a compile check outside of mod_perl
+		$self->restart;
+	}
+
+	return $self;
+}
+
+
+sub handle ($$) {
 	my $self = shift;
 	my $r    = shift;
 
@@ -67,7 +81,7 @@ sub handle($$) {
 	}
 
 	unless (defined($self->{'hosts'}->{$id})) {
-		$r->log_error("host id '$id' unknown");
+		$r->log_error("host id '$id' unknown. Valid ids are: ".join(",",keys %{$self->{'hosts'}}));
 		return 503;
 	}
 
@@ -159,7 +173,7 @@ sub handle($$) {
 	####################
 	# get paramaters 
 	####################
-	$run->{'input_params'} = $self->parse_params($r);
+	$run->{'input_params'} = $self->parse_params($r, $host);
 	$debug->mark("parameter parsing");
 
 	####################
@@ -204,29 +218,26 @@ sub handle($$) {
 }
 
 sub parse_params {
-	my $self = shift;
-	my $r    = shift;
+	my $self = shift();
+	my $r    = shift();
+	my $host = shift();
+
+	my $apr  = Apache::Request->new($r,
+	                                POST_MAX => $host->{'upload_size_max'});
+	if($apr->parse()) {
+		$self->display_host_error($r, "File upload has returned the following error:\n".$apr->notes('error-notes'));
+		return OK;
+	}
 
 	my %params;
-	my @p = $r->method eq 'POST' ? $r->content : $r->args;
+	foreach($apr->param) {
+		my @value = $apr->param($_);
+		$params{$_} = @value > 1 ? [@value] : $value[0];
+	}
 
-	# now we step through the list
-	for (my $i=0; $i <= $#p; $i += 2) {
-		if (defined($params{$p[$i]})) {
-			# this is a param we've seen before
-			if (ref($params{$p[$i]})) {
-				# this isn't the first duplicate, so we just push onto the existing array
-				push(@{$params{$p[$i]}},$p[$i+1]);
-			}
-			else {
-				# this is the first duplicate, make an array
-				$params{$p[$i]} = [ $params{$p[$i]}, $p[$i+1] ];
-			}
-		}
-		else {
-			# haven't seen this one before, or it's a singlular param
-			$params{$p[$i]} = $p[$i+1];
-		}
+	my @uploads = $apr->upload;
+	if(@uploads) {
+		$params{'__voodoo_file_upload__'} = @uploads > 1 ? [@uploads] : $uploads[0];
 	}
 
 	return \%params;
@@ -411,6 +422,9 @@ sub generate_html {
 						}
 						return $self->redirect($r,$return->[1]);
 					}
+					elsif (-e $host->{'template_dir'}."/access_denied.tmpl") {
+						return $self->redirect($r,$host->{'site_root'}."access_denied");
+					}
 					else {
 						return FORBIDDEN;
 					}
@@ -422,7 +436,7 @@ sub generate_html {
 					return OK;
 				}
 				else {
-					print STDERR "AIEEE!! $return->[0] is not a supported command\n";
+					$r->log_error("AIEEE!! $return->[0] is not a supported command");
 					$return = {};
 				}
 			}
@@ -544,80 +558,80 @@ sub display_host_error {
 	$r->rflush();
 }
 
-sub restart($$) { 
+sub restart { 
 	my $self = shift;
-	my $r    = shift;
-
-	print STDERR "Voodoo starting...\n";
 
 	# wipe / initialize host information
 	$self->{'hosts'} = {};
 
-	my $conf_dir = $r->server_root_relative("conf/voodoo");
-	opendir(DIR,$conf_dir) || die "Can't open configuration dir: $!";
+	my $s = Apache->server;
+
+	$s->log_error("Voodoo starting...");
+
+	my $conf_dir = Apache->server_root_relative("conf/voodoo");
+
+	unless(opendir(DIR,$conf_dir)) {
+		$s->log_error("Can't open configuration dir: $!");
+		return;
+	}
+
 	foreach (readdir(DIR)) {
 		next unless $_ =~ /[a-zA-Z]\w*\.conf$/;
 		next unless -f "$conf_dir/$_";
 		next unless -r "$conf_dir/$_";
 
-		print STDERR "starting host $_\n";
+		$s->log_error("starting host $_");
 
-		$self->start_host("$conf_dir/$_");
+		my $conf = Apache::Voodoo::ServerConfig->new("$conf_dir/$_");
+
+		# check to see if we can get a database connection
+		foreach (@{$conf->{'dbs'}}) {
+			$conf->{'dbh'} = DBI->connect(@{$_});
+			last if $conf->{'dbh'};
+			
+			$s->log_error("========================================================");
+			$s->log_error("DB CONNECT FAILED FOR ".$conf->{'id'});
+			$s->log_error("$DBI::errstr");
+			$s->log_error("========================================================");
+		}
+
+		# if the database connection was invalid (or there wasn't one, this would 'die'.  
+		# eval wrap is to trap and trow away this possible error ('cause we don't care)
+		eval {
+			$conf->{'dbh'}->disconnect;
+		};
+
+		$self->{'hosts'}->{$conf->{'id'}} = $conf;
+		
+		# notifiy of start errors
+		$self->{'hosts'}->{$conf->{'id'}}->{"DEAD"} = 0;
+
+		if ($conf->{'errors'}) {
+			$s->log_error($conf->{'id'}." has ".$conf->{'errors'}." errors");
+			if ($conf->{'halt_on_errors'}) {
+				$s->log_error(" (dropping this site)");
+
+				$self->{'hosts'}->{$conf->{'id'}}->{"DEAD"} = 1;
+
+				return;
+			}
+			else {
+				$s->log_error(" (loading anyway)");
+			}
+		}
+
+		# ick..this feels wrong...don't know of a cleaner way yet.
+		unless (defined($conf->{'handlers'}->{'display_error'})) {
+			$conf->{'handlers'}->{'display_error'} = Apache::Voodoo::DisplayError->new();
+		}
+
+		if ($conf->{'use_themes'} && !defined($self->{'theme_handler'})) {
+			# we're using themes and the theme handler hasn't been initialized yet
+			require "Apache/Voodoo/Theme.pm";
+			$self->{'theme_handler'} = Apache::Voodoo::Theme->new();
+		}
 	}
 	closedir(DIR);
-}
-
-
-sub start_host {
-	my $self = shift;
-	my $conf = Apache::Voodoo::ServerConfig->new(shift);
-
-	# check to see if we can get a database connection
-	foreach (@{$conf->{'dbs'}}) {
-		$conf->{'dbh'} = DBI->connect(@{$_});
-		last if $conf->{'dbh'};
-		
-		print STDERR "========================================================\n";
-		print STDERR "DB CONNECT FAILED FOR ".$conf->{'id'}."\n";
-		print STDERR "$DBI::errstr\n";
-		print STDERR "========================================================\n";
-	}
-
-	# if the database connection was invalid (or there wasn't one, this would 'die'.  
-	# eval wrap is to trap and trow away this possible error ('cause we don't care)
-	eval {
-		$conf->{'dbh'}->disconnect;
-	};
-
-	$self->{'hosts'}->{$conf->{'id'}} = $conf;
-	
-	# notifiy of start errors
-	$self->{'hosts'}->{$conf->{'id'}}->{"DEAD"} = 0;
-
-	if ($conf->{'errors'}) {
-		print STDERR $conf->{'id'}." has ".$conf->{'errors'}." errors";
-		if ($conf->{'halt_on_errors'}) {
-			print STDERR " (dropping this site)\n";
-
-			$self->{'hosts'}->{$conf->{'id'}}->{"DEAD"} = 1;
-
-			return;
-		}
-		else {
-			print STDERR " (loading anyway)\n";
-		}
-	}
-
-	# ick..this feels wrong...don't know of a cleaner way yet.
-	unless (defined($conf->{'handlers'}->{'display_error'})) {
-		$conf->{'handlers'}->{'display_error'} = Apache::Voodoo::DisplayError->new();
-	}
-
-	if ($conf->{'use_themes'} && !defined($self->{'theme_handler'})) {
-		# we're using themes and the theme handler hasn't been initialized yet
-		require "Apache/Voodoo/Theme.pm";
-		$self->{'theme_handler'} = Apache::Voodoo::Theme->new();
-	}
 }
 
 sub untie {

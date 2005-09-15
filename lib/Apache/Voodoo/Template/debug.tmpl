@@ -1,8 +1,28 @@
-<!-- $Id: debug.tmpl 1300 2005-01-15 18:24:40Z medwards $ -->
+<!-- $Id: debug.tmpl 2597 2005-09-15 16:33:41Z medwards $ -->
 <TMPL_IF NAME="DEBUG">
 <script>
-function vd_toggle (obj) {
+var __YourBrowserIsBroken__ = (navigator.userAgent.toLowerCase().indexOf("msie") != -1);
+function vd_toggle (obj, topLevel) {
 	obj.parentNode.className = (obj.parentNode.className == "vdOpen") ? 'vdClosed' : 'vdOpen';
+	
+	// Prevents IE rendering stupidity with layers over select lists
+	if (__YourBrowserIsBroken__) {
+
+		var selectState;
+                if (topLevel == 1) {
+			selectState = (obj.parentNode.className == "vdOpen") ? 'hidden': 'visible';
+		}
+		else {
+			selectState = 'hidden';
+		}
+
+		var selects = document.getElementsByTagName("SELECT");
+
+		for (var i = 0; i < selects.length; i++) {
+			selects[i].style.visibility = selectState;
+		}
+	}
+	
 	return false;
 }
 </script>
@@ -18,6 +38,7 @@ div.voodooDebug {
 	font-size: 12px;
 	background-color: #DDD;
 	position: absolute;
+	top: 0px;
 	right: 0px;
 	z-index: 10000;
 	border: 1px solid black;
@@ -81,7 +102,7 @@ div.voodooDebug .vdDepth15 { margin-left: 26em; white-space: pre; }
 
 <div class=voodooDebug>
 	<div class="vdClosed">
-		<span onClick="vd_toggle(this);">Debug</span>
+		<span onClick="vd_toggle(this,1);">Debug</span>
 		<div class="vdContent">
 			<div class="vdClosed">
 				<span onClick="vd_toggle(this);">Generation Time</span>

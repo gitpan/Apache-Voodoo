@@ -6,7 +6,7 @@ Apache::Voodoo::Debug - handles operations associated with debugging output.
 
 =head1 VERSION
 
-$Id: Debug.pm 1488 2005-02-14 00:06:27Z medwards $
+$Id: Debug.pm 2597 2005-09-15 16:33:41Z medwards $
 
 =head1 SYNOPSIS
 
@@ -20,7 +20,7 @@ methods from L<Apache::Voodoo>
 =cut ###########################################################################
 package Apache::Voodoo::Debug;
 
-$VERSION = '1.12';
+$VERSION = '1.13';
 
 use strict;
 use Time::HiRes;

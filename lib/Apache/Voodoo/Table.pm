@@ -6,13 +6,13 @@
 #
 #  VERSION
 # 
-# $Id: Table.pm 1488 2005-02-14 00:06:27Z medwards $
+# $Id: Table.pm 2597 2005-09-15 16:33:41Z medwards $
 #
 ####################################################################################
 
 package Apache::Voodoo::Table;
 
-$VERSION = '1.12';
+$VERSION = '1.13';
 
 use strict;
 
@@ -21,7 +21,7 @@ use Data::Dumper;
 
 use Email::Valid;
 
-use Apache::Voodoo::Valid_URL;
+use Apache::Voodoo::ValidURL;
 use Apache::Voodoo::Pager;
 
 sub new {
@@ -29,17 +29,10 @@ sub new {
 	my $self = {};
 	bless $self, $class;
 
+	$self->{'pager'} = Apache::Voodoo::Pager->new();
+
 	$self->set_configuration(shift);
 
-	$self->{'pager'} = Apache::Voodoo::Pager->new('count'   => 40,
-	                                              'window'  => 10,
-	                                              'persist' => [ 
-	                                                  'pattern',
-	                                                  'limit',
-	                                                  'sort',
-	                                                  'last_sort',
-	                                                  'desc'
-	                                              ]);
 	return $self;
 }
 
@@ -170,6 +163,20 @@ sub set_configuration {
 		push(@{$self->{'list_search_items'}},[$_->[1],$_->[0]]);
 		$self->{'list_search'}->{$_->[1]} = 1;
 	}
+
+	# setup the pagination options
+	$self->{'pager'}->set_configuration(
+		'count'   => 40,
+		'window'  => 10,
+		'persist' => [ 
+			'pattern',
+			'limit',
+			'sort',
+			'last_sort',
+			'desc',
+			@{$c->{'list_options'}->{'persist'} || []}
+		]
+	);
 
 	$self->{'errors'} = \@errors;
 	if (@errors) {
@@ -345,7 +352,7 @@ sub edit {
 	$self->{'success'} = 0;
 	$self->{'edit_details'} = [];
 
-	my $dbh      = $p->{'dbh'};
+	my $dbh       = $p->{'dbh'};
 	my $session   = $p->{'session'};
 	my $params    = $p->{'params'};
 
@@ -870,7 +877,7 @@ sub _process_params {
 				}
 			}
 			elsif($_->{'valid'} eq "url") {
-				if (length($v{$_->{'name'}}) && Apache::Voodoo::Valid_URL::valid_url($v{$_->{'name'}}) == 0) {
+				if (length($v{$_->{'name'}}) && Apache::Voodoo::ValidURL::valid_url($v{$_->{'name'}}) == 0) {
 					$errors{'BAD_'.$_->{'name'}} = 1;
 				}
 			}
