@@ -6,7 +6,7 @@ Apache::Voodoo::DisplayError
 
 =head1 VERSION
 
-$Id: DisplayError.pm 2597 2005-09-15 16:33:41Z medwards $
+$Id: DisplayError.pm 4269 2006-11-27 21:14:10Z medwards $
 
 =head1 SYNOPSIS
 
@@ -17,7 +17,7 @@ user interaction is through L<Apache::Voodoo>::display_error()
 
 package Apache::Voodoo::DisplayError;
 
-$VERSION = '1.13';
+$VERSION = '1.21';
 
 use strict;
 use base ("Apache::Voodoo");
@@ -34,18 +34,21 @@ sub handle {
 		my $errorstring = $session->{"er_" . $error}->{'error'};
 		my $errorurl    = $session->{"er_" . $error}->{'return'};
 
-		$self->debug($self->history($session,2));
-		$errorurl ||= $self->history($session,2);
+		$errorurl ||= $self->history($session,3);
 
 		# remove it from the session to keep it from growing
 		delete $session->{"er_" . $error};
 	
-		return {"ERROR_STRING" => $errorstring,
+		return {
+			"ERROR_STRING" => $errorstring,
 		        "ERROR_URL"    => $errorurl
 		       };
 	}
 	else {
-		return {'ERROR_STRING' => "Eeek! Error message not found\n"};
+		return {
+			'ERROR_STRING' => "Can't find the requested error message.",
+			'ERROR_URL'    => "/index"
+		};
 	}
 }
 

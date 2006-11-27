@@ -6,13 +6,13 @@
 #
 #  VERSION
 # 
-# $Id: Table.pm 2597 2005-09-15 16:33:41Z medwards $
+# $Id: Table.pm 4269 2006-11-27 21:14:10Z medwards $
 #
 ####################################################################################
 
 package Apache::Voodoo::Table;
 
-$VERSION = '1.13';
+$VERSION = '1.21';
 
 use strict;
 
@@ -38,7 +38,15 @@ sub new {
 
 sub set_configuration {
 	my $self = shift;
-	my $c    = shift;
+	my $conf = shift;
+
+	# Data::Dumper is something that comes by default with perl installs
+	# and provides a easy way to make deep copies.
+	my $c;
+	{
+		$Data::Dumper::terse = 1;
+		$c = eval Dumper($conf);
+	}
 
 	my %COLUMN_TYPES = (
 		"varchar" => { 
@@ -60,11 +68,12 @@ sub set_configuration {
 			'left'  => 1,
 			'right' => 1,
 		},
-		'date'     => {},
-		'time'     => {},
-		'datetime' => {},
-		'text'     => {},
-		'bit'      => {}
+		'date'      => {},
+		'time'      => {},
+		'datetime'  => {},
+		'timestamp' => {},
+		'text'      => {},
+		'bit'       => {}
 	);
 
 	my @errors;
@@ -80,7 +89,7 @@ sub set_configuration {
 		}
 
 		unless (defined($COLUMN_TYPES{$conf->{'type'}})) {
-			push(@errors,"don't know how to handle colum type $conf->{'type'} $name");
+			push(@errors,"don't know how to handle type $conf->{'type'} for column $name");
 			next;
 		}
 		
@@ -89,8 +98,8 @@ sub set_configuration {
 			# but I don't quite remember what :)
 			# primary key definately CAN'T be listed in the columns...it makes 'add' very unhappy
 			#
-			# oh yeah, now I remember, need the column difinition to know type, regexp, etc, etc.
-			# it has to be pulled out and used seperatly.
+			# oh yeah, now I remember, need the column definition to know type, regexp, etc, etc.
+			# it has to be pulled out and used separatly.
 			next;
 		}
 
@@ -111,7 +120,7 @@ sub set_configuration {
 			if ($conf->{$_}) {
 				push(@{$self->{$_}},$name);
 			}
-			delete $conf->{$_};
+			delete($conf->{$_});
 		}
 
 		if (defined($conf->{'references'})) {
@@ -150,7 +159,7 @@ sub set_configuration {
 		delete $conf->{'type'};
 
 		foreach (keys %{$conf}) {
-			push(@errors,"unknown option: $_ in column $name");
+			push(@errors,"unknown option: \"$_\" in column \"$name\"");
 		}
 	}
 
@@ -182,9 +191,8 @@ sub set_configuration {
 	if (@errors) {
 		$self->{'config_invalid'} = 1;
 
-		print STDERR "Errors in Apache::Voodoo::Table configuration for $self->{'table'}\n";
+		print STDERR "Errors in Apache::Voodoo::Table configuration in ".(caller(1))[1]."\n";
 		print STDERR join("\n",@errors,"\n");
-		return;
 	}
 }
 
@@ -221,7 +229,7 @@ sub add {
 	my $self = shift;
 	my $p = shift;
 
-	my $dbh   = $p->{'dbh'};
+	my $dbh    = $p->{'dbh'};
 	my $params = $p->{'params'};
 
 	my $errors = {};
@@ -569,14 +577,14 @@ sub delete {
 }
 
 sub list {
-	my $self = shift;
-	my $p    = shift;
+	my $self                  = shift;
+	my $p                     = shift;
 	my $additional_constraint = shift;
 
 	$self->{'success'} = 0;
 
-	my $dbh      = $p->{'dbh'};
-	my $params    = $p->{'params'};
+	my $dbh    = $p->{'dbh'};
+	my $params = $p->{'params'};
 
 	my $pattern = $params->{'pattern'};
 	my $limit   = $params->{'limit'};
@@ -585,7 +593,7 @@ sub list {
 	my $last_sort = $params->{'last_sort'} || $self->{'default_sort'};
 	my $desc      = $params->{'desc'};
 	
-	my $count   = $params->{'count'}   || "40";
+	my $count   = $params->{'count'}   || $self->{'pager'}->{'count'};
 	my $page    = $params->{'page'}    || 1;
 	my $showall = $params->{'showall'} || 0;
 
@@ -593,6 +601,12 @@ sub list {
 	my @list;
 	foreach ($self->{'pkey'}, @{$self->{'columns'}}) {
 		push(@list,"$self->{'table'}.$_");
+	}
+
+	if(ref($additional_constraint)) {
+		if(defined($additional_constraint->{'additional_column'})) {
+			push(@list, $additional_constraint->{'additional_column'});
+		}
 	}
 
 	# figure out tables to join against
@@ -616,13 +630,21 @@ sub list {
 	if (defined($self->{'list_search'}->{$limit}) && $self->safe_text($pattern)) {
 		# we need to narrow the set
 		# 7-18-2001 added lower to make case insensitive for Postgres
-		$select_stmt .= " WHERE $limit LIKE LOWER('$pattern%') ";
+		$select_stmt .= " WHERE $limit LIKE LOWER(\"$pattern%\") ";
 
-		if (length($additional_constraint)) {
+	# FIXME!!!
+		if(ref($additional_constraint)) {
+			if(defined($additional_constraint->{'additional_constraint'})) {
+				$select_stmt .= "AND ".$additional_constraint->{'additional_constraint'};
+			}
+		} elsif (length($additional_constraint)) {
 			$select_stmt .= "AND $additional_constraint";
 		}
-	}
-	elsif (length($additional_constraint)) {
+	} elsif(ref($additional_constraint)) {
+		if(defined($additional_constraint->{'additional_constraint'})) {
+			$select_stmt .= " WHERE ".$additional_constraint->{'additional_constraint'};
+		}
+	} elsif (length($additional_constraint)) {
 		$select_stmt .= " WHERE $additional_constraint";
 	}
 
@@ -651,7 +673,6 @@ sub list {
 
 	$select_stmt .= " LIMIT $count OFFSET ". $count * ($page -1) unless $showall;
 
-	$self->debug($select_stmt);
 	my $page_set = $dbh->selectall_arrayref($select_stmt) || $self->db_error();
 
 	my %return;
@@ -691,6 +712,7 @@ sub list {
 			$key =~ s/$self->{'table'}\.//; # take of the table name in front
 			# we either end up with the column name from the primay table,
 			# or the joined table name + column
+			$key =~ s/^.* AS //i;
 
 			$v{$key} = $_->[$i];
 
@@ -716,7 +738,7 @@ sub view {
 
 	$self->{'success'} = 0;
 
-	my $dbh   = $p->{'dbh'};
+	my $dbh    = $p->{'dbh'};
 	my $params = $p->{'params'};
 
 	unless ($params->{$self->{'pkey'}} =~ /$self->{'pkey_regexp'}/) {
@@ -753,7 +775,6 @@ sub view {
 			$self->{'table'}.$self->{'pkey'} = ?
 			$additional_constraint";
 
-	# $self->debug($select_statement);
 	my $res = $dbh->selectall_arrayref($select_statement,undef,$params->{$self->{'pkey'}}) || $self->db_error();
 
 	my %v;
@@ -794,8 +815,8 @@ sub toggle {
 
 	$self->{'success'} = 0;
 
+	my $dbh    = $p->{'dbh'};
 	my $params = $p->{'params'};
-	my $dbh   = $p->{'dbh'};
 
 	unless ($params->{$self->{'pkey'}} =~ /$self->{'pkey_regexp'}/) {
 		return $self->display_error("Invalid ID");

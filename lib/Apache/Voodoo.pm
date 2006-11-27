@@ -2,7 +2,7 @@
 #
 # Apache::Voodoo - Base class for all Voodoo page handling modules
 #
-# $Id: Voodoo.pm 2597 2005-09-15 16:33:41Z medwards $
+# $Id: Voodoo.pm 4269 2006-11-27 21:14:10Z medwards $
 # 
 # This is the object that your modules must inherit from in order to interact correctly
 # with Voodoo.  It also provides a set of extremely useful methods.
@@ -10,7 +10,7 @@
 ####################################################################################
 package Apache::Voodoo;
 
-$VERSION = '1.13';
+$VERSION = '1.21';
 
 use strict;
 use Data::Dumper;
@@ -21,7 +21,7 @@ sub new {
 
 	bless $self, $class;
 
-	$self->init();
+	$self->init(@_);
 
 	return $self;
 }
@@ -81,7 +81,7 @@ sub access_denied {
 sub history {
 	my $self = shift;
 	my $session = shift;
-	my $index = shift || 1;
+	my $index = shift;
 
 	return $session->{'history'}->[$index]->{'uri'}.'?'.$session->{'history'}->[$index]->{'params'};
 }
@@ -89,20 +89,22 @@ sub history {
 sub tardis {
 	my $self = shift;
 	my $p = shift;
-	my $uri = $p->{'uri'};
+
+	my %targets = map { $_ => 1 } @_;
+
+	my $uri = '/'.$p->{'uri'};
 	my $history = $p->{'session'}->{'history'};
 
-	my $i;
 	my $find_uri=1;
-	for ($i=0; $i <= $#{$history}; $i++) {
-		if ($find_uri && $p->{'uri'} eq $history->[$i]->{'uri'}) {
-			$find_uri = 0;
+	for (my $i=0; $i <= $#{$history}; $i++) {
+		if ($find_uri) {
+			if ($uri eq $history->[$i]->{'uri'}) {
+				$find_uri = 0;
+			}
 		}
 		else {
-			foreach (@_) {
-				if ($_ eq $history->[$i]->{'uri'}) {
-					return $self->redirect($self->history($p->{'session'},$i));
-				}
+			if ($targets{$history->[$i]->{'uri'}}) {
+				return $self->redirect($self->history($p->{'session'},$i));
 			}
 		}
 	}
@@ -176,16 +178,28 @@ sub prep_select {
 	return [ 
 		map {
 			{
-				"ID"       => $_->[0],
-				"NAME"     => $_->[1],
-				"SELECTED" => defined $selected{$_->[0]}
+				"ID"              => $_->[0],
+				"ID."   . $_->[0] => 1,
+				"NAME"            => $_->[1],
+				"NAME." . $_->[1] => 1,
+				"SELECTED" => (defined $selected{$_->[0]})?'SELECTED':0
 			}
 		} @{$list}
 	];
 }
 
 sub safe_text {
+	# return $_[1] =~ /^[\w\s\.\,\/\[\]\{\}\+\=\-\(\)\:\;\&\?\*\'\!]*$/;
 	return $_[1] =~ /^[\w\s\.\,\/\[\]\{\}\+\=\-\(\)\:\;\&\?\*]*$/;
+}
+
+sub sanitize_text {
+	my $self = shift;
+	my $text = shift;
+
+	# return $_[1] =~ /^[\w\s\.\,\/\[\]\{\}\+\=\-\(\)\:\;\&\?\*\'\!]*$/;
+	$text =~ s/[^\w\s\.\,\/\[\]\{\}\+\=\-\(\)\:\;\&\?\*]/ /g;
+	return $text;
 }
 
 sub trim {
@@ -231,6 +245,9 @@ sub date_to_sql {
 
 	# Get rid of all spaces in the date
 	$date =~ s/\s//go;
+
+        # date missing. return null;
+        return undef unless (length($date));
 
 	# Split the date up into month day year
 	my ($m,$d,$y) = split(/[\/-]/,$date,3);

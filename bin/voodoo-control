@@ -1,0 +1,216 @@
+#!/usr/bin/perl -I /data/apache/lib/perl
+
+=pod ####################################################################################
+
+=head1 NAME
+
+voodoo-control - install / upgrade 
+
+=head1 VERSION
+
+$Id: Handler.pm 2597 2005-09-15 16:33:41Z medwards $
+
+=head1 SYNOPSIS
+
+FIXME: Add documentation
+
+=cut ####################################################################################
+
+use strict;
+use warnings;
+
+use Getopt::Long;
+use Data::Dumper;
+
+# turn off buffered output
+$| = 1;
+
+my $pretend = 0;
+my $help    = 0;
+my $verbose = 0;
+my ($dbhost,$dbname,$dbuser,$dbpass,$dbroot);
+
+GetOptions(
+	'help'        => \$help,
+	'pretend'     => \$pretend,
+	'verbose|v:s' => \$verbose,
+	'dbhost|h:s'  => \$dbhost,
+	'dbname|n:s'  => \$dbname,
+	'dbuser|u:s'  => \$dbuser,
+	'dbpass|p:s'  => \$dbpass,
+	'dbroot|r:s'  => \$dbroot
+);
+
+show_usage() if $help;
+
+my ($command,$target) = @ARGV;
+my $app_name;
+
+if ($command eq "install") {
+	# use these on demand.  This has two benefits.
+	# a) We don't spend time using in stuff we don't need.
+	# b) This program will still run even if these fail to load because of bad config data.
+	#    This allows this program to be used to fix the broken config
+	eval "
+		use Apache::Voodoo::Install::Distribution;
+		use Apache::Voodoo::Install::Updater;
+	";
+	die $@ if ($@);
+
+	################################################################################
+	# make sure this file exists and that the name follows the correct format
+	################################################################################
+	my $distro = Apache::Voodoo::Install::Distribution->new(
+		'verbose'      => $verbose,
+		'pretend'      => $pretend,
+		'dbhost'       => $dbhost,
+		'dbname'       => $dbname,
+		'dbpass'       => $dbpass,
+		'dbroot'       => $dbroot,
+		'distribution' => $target
+	);
+
+	$distro->do_install();
+
+	$app_name = $distro->app_name();
+
+	my $updater = Apache::Voodoo::Install::Updater->new(
+			dbroot   => $dbroot,
+			app_name => $app_name,
+			verbose  => $verbose,
+			pretend  => $pretend
+	);
+
+	if ($distro->existing()) {
+		$updater->do_update();
+	}
+	else {
+		$updater->do_new_install();
+	}
+}
+elsif ($command =~ /^(update|mark_updates_applied)$/) {
+	unless ($target =~ /^[a-z]\w*$/i) {
+		print "Invalid application name.  Valid names must begin with a letter and only contain letters, numbers and _\n";
+		exit;
+	}
+
+	# use these on demand.  This has two benefits.
+	# a) We don't spend time using in stuff we don't need.
+	# b) This program will still run even if these fail to load because of bad config data.
+	#    This allows this program to be used to fix the broken config
+	eval "use Apache::Voodoo::Install::Updater;";
+	die $@ if ($@);
+
+	$app_name = $target;
+
+	my $updater = Apache::Voodoo::Install::Updater->new(
+			dbroot   => $dbroot,
+			app_name => $app_name,
+			verbose  => $verbose,
+			pretend  => $pretend
+	);
+
+	if ($command eq "update") {
+		$updater->do_update();
+		do_post($app_name,$verbose,$pretend);
+	}
+	else {
+		$updater->mark_updates_applied();
+	}
+}
+elsif ($command eq "showconfig") {
+	eval "use Apache::Voodoo::Constants;";
+	if ($@) { die $@; }
+
+	my $cnf = Apache::Voodoo::Constants->new();
+
+	print "Apache Prefix Path: ", $cnf->prefix(),"\n";
+	print "  App Install Path: ", $cnf->install_path(),"\n";
+	print "      Session Path: ", $cnf->session_path(),"\n";
+	print "  Config File Path: ", $cnf->conf_path(),"\n";
+	print "  Config File Name: ", $cnf->conf_file(),"\n";
+	print "  Update File Path: ", $cnf->updates_path(),"\n";
+	print "Template File Path: ", $cnf->tmpl_path(),"\n";
+	print "  Perl Module Path: ", $cnf->code_path(),"\n";
+	print "        Apache UID: ", $cnf->apache_uid(),"\n";
+	print "        Apache GID: ", $cnf->apache_gid(),"\n";
+	print "\n";
+	print "Config settings stored in: ", $INC{'Apache/Voodoo/MyConfig.pm'},"\n";
+	exit 0;	
+}
+elsif ($command eq "setconfig") {
+	my $cnf = {};
+
+	eval "use Apache::Voodoo::MyConfig;";
+	unless ($@) {
+		# There is one, so we'll use the settings in it as the default
+		if (ref($Apache::Voodoo::MyConfig::Config) eq "HASH") {
+			$cnf = $Apache::Voodoo::MyConfig::Config;
+		}
+	}
+
+	eval "use Apache::Voodoo::Install::Config;";
+	die $@ if ($@);
+
+	my $cfg = Apache::Voodoo::Install::Config->new(%{$cnf});
+
+	$cfg->do_config_setup($pretend);
+}
+else {
+	show_usage();
+}
+
+sub do_post {
+	my ($app_name,$verbose,$pretend) = @_;
+
+	eval "
+		use Apache::Voodoo::Install::Post;
+	";
+	if ($@) {
+		die $@;
+	}
+
+	my $post = Apache::Voodoo::Install::Post->new(
+		app_name => $app_name,
+		verbose  => $verbose,
+		pretend  => $pretend
+	);
+
+	$post->do_setup_checks();
+}
+	
+sub show_usage {
+	print "\nAutomated install / upgrade for Apache::Voodoo based applications.\n\n";
+	print "Usage: voodoo-control [options] [command]\n";
+	print "Commands:\n";
+	print "    install \"installfile\" Install the given application.\n";
+	print "    update \"app name\"     Run the update steps on an already installed application.\n";
+	print "    showconfig            Show global configuration settings.\n";
+	print "    showconfig            Change global configuration settings.\n";
+	print "    anything else         Show this help message.\n";
+	print "Options:\n";
+	print "    --pretend    Step through operations.  Don't actually do anything\n";
+	print "    -h --dbhost  Override database host name in config files\n";
+	print "    -n --dbname  Override database name in conf files\n";
+	print "    -u --dbuser  Override database username in conf files\n";
+	print "    -p --dbpass  Override database password in conf files\n";
+	print "    -r --dbroot  Database root password\n";
+	print "\n";
+	exit;
+}
+
+=pod ################################################################################
+
+=head1 AUTHOR
+
+Maverick, /\/\averick@smurfbaneDOTorg
+
+=head1 COPYRIGHT
+
+Copyright (c) 2005 Steven Edwards.  All rights reserved.
+
+You may use and distribute Voodoo under the terms described in the LICENSE file include
+in this package or L<Apache::Voodoo::license>.  The summary is it's a legalese version
+of the Artistic License :)
+
+=cut ################################################################################

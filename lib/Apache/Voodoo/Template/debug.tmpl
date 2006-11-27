@@ -1,6 +1,6 @@
-<!-- $Id: debug.tmpl 2597 2005-09-15 16:33:41Z medwards $ -->
+<!-- $Id: debug.tmpl 3918 2006-07-24 22:02:47Z medwards $ -->
 <TMPL_IF NAME="DEBUG">
-<script>
+<script language="Javascript" type="text/javascript" >
 var __YourBrowserIsBroken__ = (navigator.userAgent.toLowerCase().indexOf("msie") != -1);
 function vd_toggle (obj, topLevel) {
 	obj.parentNode.className = (obj.parentNode.className == "vdOpen") ? 'vdClosed' : 'vdOpen';
@@ -9,7 +9,7 @@ function vd_toggle (obj, topLevel) {
 	if (__YourBrowserIsBroken__) {
 
 		var selectState;
-                if (topLevel == 1) {
+		if (topLevel == 1) {
 			selectState = (obj.parentNode.className == "vdOpen") ? 'hidden': 'visible';
 		}
 		else {
@@ -56,6 +56,14 @@ div.voodooDebug div.vdOpen div.vdContent {
 
 div.voodooDebug div.vdClosed div.vdContent {
 	display: none;
+}
+
+div.voodooDebug div.vdOpen div.vdOpen div.vdContent {
+	max-width: 1024px;
+	max-height: 768px;
+	overflow: -moz-scrollbars-vertical;
+	overflow-x: hidden;
+	overflow-y: auto;
 }
 
 div.voodooDebug span { 

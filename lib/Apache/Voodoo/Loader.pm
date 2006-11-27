@@ -2,7 +2,7 @@
 
 =head1 Apache::Voodoo::Loader
 
-$Id: Loader.pm 2597 2005-09-15 16:33:41Z medwards $
+$Id: Loader.pm 4269 2006-11-27 21:14:10Z medwards $
 
 =head1 Initial Coding: Maverick
 
@@ -13,7 +13,7 @@ and Loader::Dynamic
 
 package Apache::Voodoo::Loader;
 
-$VERSION = '1.13';
+$VERSION = '1.21';
 
 use strict;
 use Apache;
@@ -39,7 +39,7 @@ sub load_module {
 		$obj = $module->new;
 	};
 	if ($@) {
-		Apache->server->log_error("Failed to load $module: $@");
+		$self->{'log'}->error("Failed to load $module: $@");
 		my $error = $@;
 
 		$module =~ s/^[^:]+:://;

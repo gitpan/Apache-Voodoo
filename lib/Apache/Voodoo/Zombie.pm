@@ -6,20 +6,19 @@ Apache::Voodoo::Zombie - Internal module used by Voodoo when a end user module d
 
 =head1 VERSION
 
-$Id: Zombie.pm 2597 2005-09-15 16:33:41Z medwards $
+$Id: Zombie.pm 4269 2006-11-27 21:14:10Z medwards $
 
 =head1 SYNOPSIS
 
 This module is used by Apache::Voodoo::ServerConfig as a facimily replacement for a dead module
-when halt_on_errors is 0 in the server configuration.  Any calls to this module
-displays and error message via L<Apache::Voodoo::DisplayError> describing what blew up and
-where.  This is a development tool...you shouldn't have any Zombies in your 
-production server :)
+when either devel_mode or debug is 1 in the application's voodoo.conf.  Any calls to this module
+displays an error message via L<Apache::Voodoo::DisplayError> describing what blew up and
+where.  This is a development tool...you shouldn't have any Zombies in your production server :)
 
 =cut ################################################################################
 package Apache::Voodoo::Zombie;
 
-$VERSION = '1.13';
+$VERSION = '1.21';
 
 use strict;
 

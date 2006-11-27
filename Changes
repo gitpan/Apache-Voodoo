@@ -1,24 +1,50 @@
-V 1.13 - 9/15/2005
+1.21 - 11/27/2006
+================
+Bug fixes, improved handling of the apache configuration paths.
 
-- Works with DSO builds of mod_perl.  The PerlRestartHandler isn't called the same way with ia DSO vs build in version of mod_perl
+1.20 - 02/07/2006
+================
+Added automated install / upgrade process of Voodoo based sites (see voodoo-control for details).
+Unfortunately to make this work cleanly, I had to introduce a backwards-incompatibility.  The
+layout of a site is no longer completely arbitrary as it was before, certain things are expected
+to reside in certain locations.  Completely arbitrary layouts yielded no real benefit, made the docs
+more complex thus raising the initial learning curve, and introduced needless complexities
+and hoop jumping.
 
-- abstracted pagination control object (Apache::Voodoo::Pager)
+Loads of bug fixes:
+	AV::Table is no longer destructive to the incoming configuration structure.
 
-- various bug fixes
+	Made history capture only operate on GET requests.  Capturing POSTs can lead to bad things
+	happening if you happen to redirect back to a posted history event...same thing applies
+	for PUTs.  The side effect is that you now need to be more careful with your form method settings,
+	which we all should be doing anyway :)
 
-V 1.1.2 - 2/13/2005
+1.13 - 9/15/2005
+================
+
+Works with DSO builds of mod_perl.  The PerlRestartHandler isn't called the same way with ia DSO vs build in version of mod_perl
+
+abstracted pagination control object (Apache::Voodoo::Pager)
+
+various bug fixes
+
+1.1.2 - 2/13/2005
+=================
 
 Again with the documentation indexing thing.
 
-V 1.1.1 - 2/11/2005
+1.1.1 - 2/11/2005
+=================
 
 search.cpan.org didn't wanna play nice with my documentation...hopefully this fixes it.
 
-V 1.1.0 - 2/11/2005
+1.1.0 - 2/11/2005
+=================
 
 First public release.
 
-V 1.0.x
+1.0.x
+================
 
 Historic, non-public releases.  I have them if anyone is interested, but they are not
 backwards compatable with the current release

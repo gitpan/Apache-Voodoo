@@ -6,7 +6,7 @@ Apache::Voodoo::Handler - Main interface between mod_perl and Voodoo
 
 =head1 VERSION
 
-$Id: Handler.pm 2597 2005-09-15 16:33:41Z medwards $
+$Id: Handler.pm 4269 2006-11-27 21:14:10Z medwards $
 
 =head1 SYNOPSIS
  
@@ -17,7 +17,7 @@ application's page handling modules.
 =cut ################################################################################
 package Apache::Voodoo::Handler;
 
-$VERSION = '1.13';
+$VERSION = '1.21';
 
 use strict;
 
@@ -34,9 +34,11 @@ use Time::HiRes;
 use Data::Dumper;
 $Data::Dumper::Terse = 1;
 
+use Apache::Voodoo::Constants;
 use Apache::Voodoo::ServerConfig;
 use Apache::Voodoo::Debug;
 use Apache::Voodoo::DisplayError;
+use Apache::Voodoo::Log;
 
 ######################################
 # GLOBAL CONFIG VARIABLES            #
@@ -61,6 +63,9 @@ sub new {
 	my $self = {@_};
 	bless $self, $class;
 
+	$self->{'constants'} = Apache::Voodoo::Constants->new();
+	$self->{'log'} = Apache::Voodoo::Log->new();
+
 	if (exists $ENV{'MOD_PERL'}) {
 		# let's us do a compile check outside of mod_perl
 		$self->restart;
@@ -76,12 +81,12 @@ sub handle ($$) {
 
 	my $id = $r->dir_config("ID");
 	unless (defined($id)) {
-		$r->log_error("PerlSetVar ID not present in configuration.  Giving up");
+		$self->{'log'}->error("PerlSetVar ID not present in configuration.  Giving up");
 		return 503;
 	}
 
 	unless (defined($self->{'hosts'}->{$id})) {
-		$r->log_error("host id '$id' unknown. Valid ids are: ".join(",",keys %{$self->{'hosts'}}));
+		$self->{'log'}->error("host id '$id' unknown. Valid ids are: ".join(",",keys %{$self->{'hosts'}}));
 		return 503;
 	}
 
@@ -107,8 +112,8 @@ sub handle ($$) {
    	$run->{'filename'} =~ s/\.tmpl$//o;
    	$run->{'uri'}      =~ s/\.tmpl$//o;
 
-	unless (-e "$run->{'filename'}.tmpl") {  return DECLINED;  }
-	unless (-r "$run->{'filename'}.tmpl") {  return FORBIDDEN; }
+	unless (-e "$run->{'filename'}.tmpl") { return DECLINED;  }
+	unless (-r "$run->{'filename'}.tmpl") { return FORBIDDEN; }
 
 	########################################
 	# We now know we have a valid file that we need to handle
@@ -174,13 +179,20 @@ sub handle ($$) {
 	# get paramaters 
 	####################
 	$run->{'input_params'} = $self->parse_params($r, $host);
+	unless (ref($run->{'input_params'})) {
+		# something went boom
+		return $run->{'input_params'};
+	}
+
 	$debug->mark("parameter parsing");
 
 	####################
 	# history capture 
 	####################
-	$self->history_queue($run);
-	$debug->mark("history capture");
+	if ($r->method eq "GET") {
+		$self->history_queue($run);
+		$debug->mark("history capture");
+	}
 
 	####################
 	# see if the user has switched debugging on or off 
@@ -224,19 +236,19 @@ sub parse_params {
 
 	my $apr  = Apache::Request->new($r,
 	                                POST_MAX => $host->{'upload_size_max'});
-	if($apr->parse()) {
+	if ($apr->parse()) {
 		$self->display_host_error($r, "File upload has returned the following error:\n".$apr->notes('error-notes'));
 		return OK;
 	}
 
 	my %params;
-	foreach($apr->param) {
+	foreach ($apr->param) {
 		my @value = $apr->param($_);
 		$params{$_} = @value > 1 ? [@value] : $value[0];
 	}
 
 	my @uploads = $apr->upload;
-	if(@uploads) {
+	if (@uploads) {
 		$params{'__voodoo_file_upload__'} = @uploads > 1 ? [@uploads] : $uploads[0];
 	}
 
@@ -384,7 +396,8 @@ sub generate_html {
 						"template_conf" => $run->{'template_conf'},
 						"themes"        => $host->{'themes'},
 						"uri"           => $run->{'uri'},
-						"user-agent"    => $r->header_in('User-Agent')
+						"user-agent"    => $r->header_in('User-Agent'),
+						"r"             => $r
 					}
 				);
 			};
@@ -436,7 +449,7 @@ sub generate_html {
 					return OK;
 				}
 				else {
-					$r->log_error("AIEEE!! $return->[0] is not a supported command");
+					$self->{'log'}->error("AIEEE!! $return->[0] is not a supported command");
 					$return = {};
 				}
 			}
@@ -472,7 +485,7 @@ sub generate_html {
 				$self->display_host_error($r,$return->[1],1);
 			}
 			else {
-				$self->display_host_error($r,"theme handler returned and unsupported type");
+				$self->display_host_error($r,"theme handler returned an unsupported type");
 			}
 			return OK;
 		}
@@ -514,6 +527,7 @@ sub generate_html {
 			'filename'          => $host->{'template_dir'}."/$skeleton_file.tmpl",
 			'path'              => [ $host->{'template_dir'} ],
 			'shared_cache'      => $host->{'shared_cache'},
+			'loop_context_vars' => $host->{'context_vars'},
 			'global_vars'       => 1,
 			'die_on_bad_params' => 0,
 		);
@@ -564,35 +578,37 @@ sub restart {
 	# wipe / initialize host information
 	$self->{'hosts'} = {};
 
-	my $s = Apache->server;
+	$self->{'log'}->error("Voodoo starting...");
 
-	$s->log_error("Voodoo starting...");
+	my $cf_name      = $self->{'constants'}->conf_file();
+	my $install_path = $self->{'constants'}->install_path();
 
-	my $conf_dir = Apache->server_root_relative("conf/voodoo");
+	$self->{'log'}->error("Scanning: $install_path");
 
-	unless(opendir(DIR,$conf_dir)) {
-		$s->log_error("Can't open configuration dir: $!");
+	unless (opendir(DIR,$install_path)) {
+		$self->{'log'}->error("Can't open dir: $!");
 		return;
 	}
 
-	foreach (readdir(DIR)) {
-		next unless $_ =~ /[a-zA-Z]\w*\.conf$/;
-		next unless -f "$conf_dir/$_";
-		next unless -r "$conf_dir/$_";
+	foreach my $id (readdir(DIR)) {
+		next unless $id =~ /^[a-z]\w*$/i;
+		my $fp = "$install_path/$id/$cf_name";
+		next unless -f $fp;
+		next unless -r $fp;
 
-		$s->log_error("starting host $_");
+		$self->{'log'}->error("starting host $id");
 
-		my $conf = Apache::Voodoo::ServerConfig->new("$conf_dir/$_");
+		my $conf = Apache::Voodoo::ServerConfig->new($id,$fp);
 
 		# check to see if we can get a database connection
 		foreach (@{$conf->{'dbs'}}) {
 			$conf->{'dbh'} = DBI->connect(@{$_});
 			last if $conf->{'dbh'};
 			
-			$s->log_error("========================================================");
-			$s->log_error("DB CONNECT FAILED FOR ".$conf->{'id'});
-			$s->log_error("$DBI::errstr");
-			$s->log_error("========================================================");
+			$self->{'log'}->error("========================================================");
+			$self->{'log'}->error("DB CONNECT FAILED FOR $id");
+			$self->{'log'}->error("$DBI::errstr");
+			$self->{'log'}->error("========================================================");
 		}
 
 		# if the database connection was invalid (or there wasn't one, this would 'die'.  
@@ -601,22 +617,22 @@ sub restart {
 			$conf->{'dbh'}->disconnect;
 		};
 
-		$self->{'hosts'}->{$conf->{'id'}} = $conf;
+		$self->{'hosts'}->{$id} = $conf;
 		
 		# notifiy of start errors
-		$self->{'hosts'}->{$conf->{'id'}}->{"DEAD"} = 0;
+		$self->{'hosts'}->{$id}->{"DEAD"} = 0;
 
 		if ($conf->{'errors'}) {
-			$s->log_error($conf->{'id'}." has ".$conf->{'errors'}." errors");
+			$self->{'log'}->error("$id has ".$conf->{'errors'}." errors");
 			if ($conf->{'halt_on_errors'}) {
-				$s->log_error(" (dropping this site)");
+				$self->{'log'}->error(" (dropping this site)");
 
 				$self->{'hosts'}->{$conf->{'id'}}->{"DEAD"} = 1;
 
 				return;
 			}
 			else {
-				$s->log_error(" (loading anyway)");
+				$self->{'log'}->error(" (loading anyway)");
 			}
 		}
 
