@@ -2,11 +2,11 @@
 
 =head1 NAME
 
-Apache::Voodoo::DisplayError
+Apache::Voodoo::DisplayError - error message displayer
 
 =head1 VERSION
 
-$Id: DisplayError.pm 4269 2006-11-27 21:14:10Z medwards $
+$Id: DisplayError.pm 4273 2006-11-28 05:49:41Z medwards $
 
 =head1 SYNOPSIS
 

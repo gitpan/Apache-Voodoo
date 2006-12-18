@@ -2,11 +2,11 @@
 
 =head1 NAME
 
-Apache::Voodoo::Install::Pid
+Apache::Voodoo::Install::Pid - Pid file handler
 
 =head1 VERSION
 
-$Id: Pid.pm 4269 2006-11-27 21:14:10Z medwards $
+$Id: Pid.pm 4273 2006-11-28 05:49:41Z medwards $
 
 =head1 SYNOPSIS
 

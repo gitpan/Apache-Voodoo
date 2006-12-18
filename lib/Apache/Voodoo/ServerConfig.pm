@@ -6,7 +6,7 @@ Apache::Voodoo::ServerConfig
 
 =head1 VERSION
 
-$Id: ServerConfig.pm 4269 2006-11-27 21:14:10Z medwards $
+$Id: ServerConfig.pm 4274 2006-11-29 15:51:36Z medwards $
 
 =head1 SYNOPSIS
 
@@ -79,6 +79,7 @@ sub load_config {
 	$self->{'session_timeout'} = $conf{'session_timeout'} || 0;
 	$self->{'cookie_name'}     = $conf{'cookie_name'}     || uc($self->{'id'}). "_SID";
 	$self->{'shared_cache'}    = $conf{'shared_cache'}    || 0;
+	$self->{'ipc_max_size'}    = $conf{'ipc_max_size'}    || 0;
 	$self->{'context_vars'}    = $conf{'context_vars'}    || 0;
 	$self->{'template_conf'}   = $conf{'template_conf'}   || {};
 
@@ -133,6 +134,15 @@ sub load_config {
 	# save an if(defined blah blah) on every page request.
 	unless (defined($self->{'template_conf'}->{'default'})) {
 		$self->{'template_conf'}->{'default'} = {};
+	}
+
+	# merge in the default block to each of the others now so that we don't have to
+	# do it at page request time.
+	foreach my $key (grep {$_ ne 'default'} keys %{$self->{'template_conf'}}) {
+		$self->{'template_conf'}->{$key} = { 
+			%{$self->{'template_conf'}->{'default'}},
+			%{$self->{'template_conf'}->{$key}}
+		};
 	}
 
 	#

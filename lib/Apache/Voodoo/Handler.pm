@@ -6,7 +6,7 @@ Apache::Voodoo::Handler - Main interface between mod_perl and Voodoo
 
 =head1 VERSION
 
-$Id: Handler.pm 4269 2006-11-27 21:14:10Z medwards $
+$Id: Handler.pm 4339 2006-12-18 23:06:10Z medwards $
 
 =head1 SYNOPSIS
  
@@ -17,7 +17,7 @@ application's page handling modules.
 =cut ################################################################################
 package Apache::Voodoo::Handler;
 
-$VERSION = '1.21';
+$VERSION = '1.22';
 
 use strict;
 
@@ -337,28 +337,20 @@ sub resolve_conf_section {
 	my $host = shift;
 	my $run  = shift;
 
-	my $config_sec = undef;
 	if (exists($host->{'template_conf'}->{$run->{'uri'}})) {
 		# one specific to this page
-		$config_sec = $run->{'uri'};
+		return $host->{'template_conf'}->{$run->{'uri'}};
 	}
-	else {
-		foreach (sort { length($b) <=> length($a) } keys %{$host->{'template_conf'}}) {
-			if ($run->{'uri'} =~ /^$_$/) {
-				$config_sec = $_;
-				last;
-			}
+
+	foreach (sort { length($b) <=> length($a) } keys %{$host->{'template_conf'}}) {
+		if ($run->{'uri'} =~ /^$_$/) {
+			# match by uri regexp
+			return $host->{'template_conf'}->{$_};
 		}
 	}
 
-	my %template_conf = %{$host->{'template_conf'}->{'default'}};
-
-	# add the page specific section if it exists...
-	if (defined($host->{'template_conf'}->{$config_sec})) {
-		@template_conf{keys %{$host->{'template_conf'}->{$config_sec}}} = values %{$host->{'template_conf'}->{$config_sec}};
-	}
-
-	return \%template_conf;
+	# not one, return the default
+	return $host->{'template_conf'}->{'default'};
 }
 
 sub generate_html {
@@ -505,6 +497,7 @@ sub generate_html {
 			'filename'          => $host->{'template_dir'}."/".$run->{'uri'}.".tmpl",
 			'path'              => [ $host->{'template_dir'} ],
 			'shared_cache'      => $host->{'shared_cache'},
+			'ipc_max_size'      => $host->{'ipc_max_size'},
 			'loop_context_vars' => $host->{'context_vars'},
 			'global_vars'       => 1,
 			'die_on_bad_params' => 0,
@@ -527,6 +520,7 @@ sub generate_html {
 			'filename'          => $host->{'template_dir'}."/$skeleton_file.tmpl",
 			'path'              => [ $host->{'template_dir'} ],
 			'shared_cache'      => $host->{'shared_cache'},
+			'ipc_max_size'      => $host->{'ipc_max_size'},
 			'loop_context_vars' => $host->{'context_vars'},
 			'global_vars'       => 1,
 			'die_on_bad_params' => 0,

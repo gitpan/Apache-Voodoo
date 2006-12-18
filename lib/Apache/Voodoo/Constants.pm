@@ -2,11 +2,11 @@
 
 =head1 NAME
 
-Apache::Voodoo::Constants
+Apache::Voodoo::Constants - interface to Apache::Voodoo configuration settings.
 
 =head1 VERSION
 
-$Id: Constants.pm 4267 2006-11-27 19:32:47Z medwards $
+$Id: Constants.pm 4338 2006-12-18 23:05:12Z medwards $
 
 =head1 SYNOPSIS
 
@@ -14,6 +14,8 @@ This package provide an OO interface to retrive the various paths and config set
 
 =cut ###########################################################################
 package Apache::Voodoo::Constants;
+
+$VERSION = '1.22';
 
 use strict;
 use warnings;
@@ -26,7 +28,10 @@ sub new {
 	eval "
 		use Apache::Voodoo::MyConfig;
 	";
-	$self = $Apache::Voodoo::MyConfig::CONFIG;
+
+	# copy the config.
+	$self = { %{$Apache::Voodoo::MyConfig::CONFIG} };
+
 	if ($@) {
 		die "$@\n".
 		    "Can't find Apache::Voodoo::MyConfig.  This probably means that Apache Voodoo hasn't been configured yet.\n".
@@ -34,6 +39,8 @@ sub new {
 	}
 
 	unless (ref($self) eq "HASH") {
+		use Data::Dumper;
+		print STDERR Dumper $self;
 		die "There was an error loading Apache::Voodoo::MyConfig.  Please run \"voodoo-control setconfig\"\n";
 	}
 

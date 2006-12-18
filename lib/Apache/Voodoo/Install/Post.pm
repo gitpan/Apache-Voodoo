@@ -6,7 +6,7 @@ Apache::Voodoo::Install::Post - handles common post site setup tasks
 
 =head1 VERSION
 
-$Id: Constants.pm 3312 2006-02-06 21:22:52Z medwards $
+$Id: Post.pm 4273 2006-11-28 05:49:41Z medwards $
 
 =head1 SYNOPSIS
 
@@ -16,6 +16,8 @@ This object is used by Voodoo internally.
 
 =cut ###########################################################################
 package Apache::Voodoo::Install::Post;
+
+$VERSION = '1.21';
 
 use strict;
 use warnings;

@@ -4,6 +4,10 @@
 
 Apache::Voodoo::Install::Updater
 
+=head1 VERSION
+
+$Id: Distribution.pm 4273 2006-11-28 05:49:41Z medwards $
+
 =head1 SYNOPSIS
 
 This package provides the methods that do pre/post/upgrade commands as specified
@@ -11,6 +15,8 @@ by the various .xml files in an application.
 
 =cut ###########################################################################
 package Apache::Voodoo::Install::Distribution;
+
+$VERSION = '1.21';
 
 use strict;
 use warnings;
@@ -144,7 +150,7 @@ sub check_existing {
 		my %old_cdata = $old_config->getall();
 
 		# save old (maybe customized?) config variables
-		foreach ('session_dir','devel_mode','shared_cache','debug','devel_mode','cookie_name','database') {
+		foreach ('session_dir','devel_mode','shared_cache','ipc_max_size', 'debug','devel_mode','cookie_name','database') {
 			$self->{'old_conf_data'}->{$_} = $old_cdata{$_};
 		}
 
