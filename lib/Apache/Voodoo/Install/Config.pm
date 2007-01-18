@@ -6,7 +6,7 @@ Apache::Voodoo::Install::Config - Apache Voodoo global settings writer
 
 =head1 VERSION
 
-$Id: Config.pm 4273 2006-11-28 05:49:41Z medwards $
+$Id: Config.pm 4342 2006-12-18 23:21:06Z medwards $
 
 =head1 SYNOPSIS
 
@@ -61,8 +61,7 @@ sub do_config_setup {
 	$self->apache_uid();
 	$self->apache_gid();
 
-	# pretend is true, bail.
-	return if $self->{'pretend'};
+	return if $self->{"pretend"};
 
 	# save settings
 	my %cfg = %{$self};

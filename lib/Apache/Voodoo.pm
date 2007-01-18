@@ -2,7 +2,7 @@
 #
 # Apache::Voodoo - Base class for all Voodoo page handling modules
 #
-# $Id: Voodoo.pm 4269 2006-11-27 21:14:10Z medwards $
+# $Id: Voodoo.pm 4382 2006-12-28 22:34:52Z medwards $
 # 
 # This is the object that your modules must inherit from in order to interact correctly
 # with Voodoo.  It also provides a set of extremely useful methods.
@@ -10,7 +10,7 @@
 ####################################################################################
 package Apache::Voodoo;
 
-$VERSION = '1.21';
+$VERSION = '2.00';
 
 use strict;
 use Data::Dumper;

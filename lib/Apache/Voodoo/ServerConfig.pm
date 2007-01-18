@@ -6,7 +6,7 @@ Apache::Voodoo::ServerConfig
 
 =head1 VERSION
 
-$Id: ServerConfig.pm 4274 2006-11-29 15:51:36Z medwards $
+$Id: ServerConfig.pm 4342 2006-12-18 23:21:06Z medwards $
 
 =head1 SYNOPSIS
 

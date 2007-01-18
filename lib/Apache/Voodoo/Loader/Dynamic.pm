@@ -1,4 +1,4 @@
-# $Id: Dynamic.pm 4269 2006-11-27 21:14:10Z medwards $
+# $Id: Dynamic.pm 4370 2006-12-26 17:22:47Z medwards $
 package Apache::Voodoo::Loader::Dynamic;
 
 $VERSION = '1.21';
@@ -7,15 +7,12 @@ use strict;
 use base("Apache::Voodoo::Loader");
 use IPC::Shareable;
 
-use Apache::Voodoo::Log;
-
 sub new {
 	my $class = shift;
 	my $self = {};
 	bless $self,$class;
 
 	$self->{'module'} = shift;
-	$self->{'log'} = Apache::Voodoo::Log->new();
 
 	$self->refresh;
 

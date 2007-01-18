@@ -6,7 +6,7 @@ Apache::Voodoo::Constants - interface to Apache::Voodoo configuration settings.
 
 =head1 VERSION
 
-$Id: Constants.pm 4338 2006-12-18 23:05:12Z medwards $
+$Id: Constants.pm 4343 2006-12-18 23:24:03Z medwards $
 
 =head1 SYNOPSIS
 
@@ -23,7 +23,6 @@ use warnings;
 sub new {
 	my $class = shift;
 
-	use Data::Dumper;
 	my $self;
 	eval "
 		use Apache::Voodoo::MyConfig;
@@ -39,8 +38,6 @@ sub new {
 	}
 
 	unless (ref($self) eq "HASH") {
-		use Data::Dumper;
-		print STDERR Dumper $self;
 		die "There was an error loading Apache::Voodoo::MyConfig.  Please run \"voodoo-control setconfig\"\n";
 	}
 

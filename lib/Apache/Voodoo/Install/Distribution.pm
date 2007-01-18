@@ -6,7 +6,7 @@ Apache::Voodoo::Install::Updater
 
 =head1 VERSION
 
-$Id: Distribution.pm 4273 2006-11-28 05:49:41Z medwards $
+$Id: Distribution.pm 4342 2006-12-18 23:21:06Z medwards $
 
 =head1 SYNOPSIS
 
