@@ -6,7 +6,7 @@ Apache::Voodoo::Handler - Main interface between mod_perl and Voodoo
 
 =head1 VERSION
 
-$Id: Handler.pm 4433 2007-01-18 15:58:06Z medwards $
+$Id: Handler.pm 4444 2007-01-19 22:52:41Z medwards $
 
 =head1 SYNOPSIS
  
@@ -17,7 +17,7 @@ application's page handling modules.
 =cut ################################################################################
 package Apache::Voodoo::Handler;
 
-$VERSION = '2.00';
+$VERSION = '2.01';
 
 use strict;
 
