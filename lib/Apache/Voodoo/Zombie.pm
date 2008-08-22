@@ -6,7 +6,7 @@ Apache::Voodoo::Zombie - Internal module used by Voodoo when a end user module d
 
 =head1 VERSION
 
-$Id: Zombie.pm 4269 2006-11-27 21:14:10Z medwards $
+$Id: Zombie.pm 6522 2008-01-25 22:50:27Z medwards $
 
 =head1 SYNOPSIS
 
@@ -17,8 +17,6 @@ where.  This is a development tool...you shouldn't have any Zombies in your prod
 
 =cut ################################################################################
 package Apache::Voodoo::Zombie;
-
-$VERSION = '1.21';
 
 use strict;
 
@@ -53,7 +51,6 @@ sub AUTOLOAD {
 		$link =~ s/([^\/]+)$/$method."_".$1/e;
 	}
 
-	$self->debug("ZOMBIE: $self->{'module'} $method");
 	return $self->display_error($error,"/$link");
 }
 

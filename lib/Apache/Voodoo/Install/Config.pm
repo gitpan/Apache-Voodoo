@@ -6,7 +6,7 @@ Apache::Voodoo::Install::Config - Apache Voodoo global settings writer
 
 =head1 VERSION
 
-$Id: Config.pm 4342 2006-12-18 23:21:06Z medwards $
+$Id: Config.pm 6315 2007-11-16 18:52:40Z medwards $
 
 =head1 SYNOPSIS
 
@@ -14,8 +14,6 @@ This object is used by Voodoo internally by "voodoo-control setconfig".
 
 =cut ###########################################################################
 package Apache::Voodoo::Install::Config;
-
-$VERSION = '1.21';
 
 use strict;
 use warnings;

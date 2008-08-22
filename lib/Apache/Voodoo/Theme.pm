@@ -2,7 +2,7 @@
 
 =head1 Apache::Voodoo::Theme
 
-$Id: Theme.pm 4269 2006-11-27 21:14:10Z medwards $
+$Id: Theme.pm 7543 2008-07-22 19:42:07Z medwards $
 
 =head1 Initial Coding: Maverick
 
@@ -13,8 +13,6 @@ This implements a post_include module that handles all the theme processing.
 =cut ################################################################################
 
 package Apache::Voodoo::Theme;
-
-$VERSION = '1.21';
 
 use strict;
 
@@ -115,11 +113,11 @@ sub choose_theme {
 		}
 	}
 
-	if ($themes->{'user_can_choose'}) {
+	if ($themes->{'__userset__'}) {
 		my $user_theme = $session->{'user_theme'};
 		if (defined($user_theme) && $user_theme ne "__default__") {
 			if (defined($themes->{$user_theme})) {
-				$self->{'chosen_theme'} = $user_theme;
+				$chosen_theme = $user_theme;
 			}
 			else {
 				delete ($session->{'user_theme'});

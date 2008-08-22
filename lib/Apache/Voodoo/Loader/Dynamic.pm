@@ -1,11 +1,8 @@
-# $Id: Dynamic.pm 4370 2006-12-26 17:22:47Z medwards $
+# $Id: Dynamic.pm 6315 2007-11-16 18:52:40Z medwards $
 package Apache::Voodoo::Loader::Dynamic;
-
-$VERSION = '1.21';
 
 use strict;
 use base("Apache::Voodoo::Loader");
-use IPC::Shareable;
 
 sub new {
 	my $class = shift;
@@ -16,10 +13,7 @@ sub new {
 
 	$self->refresh;
 
-	my %parents;
-	tie(%parents, 'IPC::Shareable', 'SVBC', { create  => 'yes', exclusive => 0, }) || die "IPC::Shareable tie failed: $!\n";
-
-	$self->{'parents'} = \%parents;
+	$self->{'parents'} = {};
 	foreach (eval '@{'.$self->{'module'}.'::ISA}') {
 		$self->{'parents'}->{$_} = $self->get_mtime($_);
 	}

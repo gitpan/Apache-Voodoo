@@ -13,8 +13,6 @@ use directly by end users.
 =cut ###########################################################################
 package Apache::Voodoo::Install::Updater;
 
-$VERSION = '1.21';
-
 use strict;
 use warnings;
 
@@ -29,7 +27,7 @@ use Digest::MD5;
 use Sys::Hostname;
 use XML::Checker::Parser;
 use File::Find;
-use Config::General;
+use Config::General qw(ParseConfig);
 
 # make CPAN download dependancies
 $CPAN::Config->{'prerequisites_policy'} = 'follow';
@@ -162,7 +160,8 @@ sub _find_updates {
 					push(@updates,$file);
 				}
 			},
-			no_chdir => 1
+			no_chdir => 1,
+			follow   => 1
 		},
 		$self->{'updates_path'}
 	);
@@ -349,12 +348,19 @@ sub _execute_commands {
 				next unless grep { /^$hostname$/ } split(/\s*,\s*/,$commands[$i+1]->[0]->{'onhosts'});
 			}
 
+			# Reset the current working directory back to the install path
+			chdir($install_path);
+
 			$data =~ s/^\s*//;
 			$data =~ s/\s*$//;
 
 			if ($type eq "shell") {
 				$self->debug("        SHELL: ", $data);
-				$self->{'pretend'} || (system($data) && die "Shell command failed: $!");
+				unless ($self->{pretend}) {
+					if (system($data)) {
+						$self->{ignore} or die "Shell command failed: $!";
+					}
+				}
 			}
 			elsif ($type eq "sql") {
 				$self->_execute_sql($data);
@@ -404,7 +410,10 @@ sub _execute_sql {
 				next if ($query =~ /^[\s;]*$/);        # an empty query turns a do into a don't
 				next if ($query =~ /^(UN)?LOCK /i);    # do yacks on these too
 
-				$dbh->do($query) || die "sql source failed $query: " . DBI->errstr;
+				unless ($dbh->do($query)) {
+					$self->{ignore} or die "sql source failed $query: " . DBI->errstr;
+				}
+
 				$query = '';
 				$c = getc SQL;
 			}
@@ -439,7 +448,9 @@ sub _execute_sql {
 		close(SQL);
 	}
 	else {
-		$dbh->do($data) || die "sql failed: DBI->errstr";
+		unless ($dbh->do($data)) {
+			$self->{ignore} or die "sql failed: DBI->errstr\n\n$data";
+		}
 	}
 }
 

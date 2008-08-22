@@ -6,7 +6,7 @@ Apache::Voodoo::Install::Pid - Pid file handler
 
 =head1 VERSION
 
-$Id: Pid.pm 4273 2006-11-28 05:49:41Z medwards $
+$Id: Pid.pm 6315 2007-11-16 18:52:40Z medwards $
 
 =head1 SYNOPSIS
 
@@ -14,8 +14,6 @@ This object is used by Voodoo internally.
 
 =cut ###########################################################################
 package Apache::Voodoo::Install::Pid;
-
-$VERSION = '1.21';
 
 use base("Apache::Voodoo::Install");
 

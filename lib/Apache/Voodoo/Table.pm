@@ -6,13 +6,11 @@
 #
 #  VERSION
 # 
-# $Id: Table.pm 4269 2006-11-27 21:14:10Z medwards $
+# $Id: Table.pm 6370 2007-12-06 20:27:50Z medwards $
 #
 ####################################################################################
 
 package Apache::Voodoo::Table;
-
-$VERSION = '1.21';
 
 use strict;
 
@@ -52,6 +50,7 @@ sub set_configuration {
 		"varchar" => { 
 			'length' => 1,   # required
 			'valid'  => 0,   # optionsl
+			'regexp' => 0
 		},
 		'unsigned_int' => {
 			'max' => 1,     
@@ -171,6 +170,19 @@ sub set_configuration {
 	foreach (@{$c->{'list_options'}->{'search'}}) {
 		push(@{$self->{'list_search_items'}},[$_->[1],$_->[0]]);
 		$self->{'list_search'}->{$_->[1]} = 1;
+	}
+
+	if (ref($c->{'joins'}) eq "ARRAY") {
+		foreach (@{$c->{'joins'}}) {
+			push(@{$self->{'joins'}},
+				{
+					table   => $_->{table},
+					pkey    => $_->{primary_key},
+					fkey    => $_->{foreign_key},
+					columns => $_->{columns} || []
+				}
+			);
+		}
 	}
 
 	# setup the pagination options
@@ -600,21 +612,57 @@ sub list {
 	# figure out tables to join against
 	my @list;
 	foreach ($self->{'pkey'}, @{$self->{'columns'}}) {
-		push(@list,"$self->{'table'}.$_");
+		if ($_ =~ /\./) {
+			push(@list,$_);
+		}
+		else {
+			push(@list,"$self->{'table'}.$_");
+		}
 	}
 
-	if(ref($additional_constraint)) {
-		if(defined($additional_constraint->{'additional_column'})) {
+	if (ref($additional_constraint)) {
+		if (defined($additional_constraint->{'additional_column'})) {
 			push(@list, $additional_constraint->{'additional_column'});
 		}
 	}
 
 	# figure out tables to join against
 	my @joins;
-	foreach my $join (@{$self->{'references'}}) {
-		push(@joins,"LEFT JOIN $join->{'table'} ON $self->{'table'}.$join->{'fkey'} = $join->{'table'}.$join->{'pkey'}");
-		foreach (@{$join->{'columns'}}) {
-			push(@list,"$join->{'table'}.$_");
+	if ($self->{references}) {
+		foreach my $join ( sort { ($a->{fkey} =~ /\./) <=> ($b->{fkey} =~ /\./) } @{$self->{'references'}}) {
+			if ($join->{fkey} =~ /\./) {
+				push(@joins,"LEFT JOIN $join->{'table'} ON $join->{'fkey'} = $join->{'table'}.$join->{'pkey'}");
+			}
+			else {
+				push(@joins,"LEFT JOIN $join->{'table'} ON $self->{'table'}.$join->{'fkey'} = $join->{'table'}.$join->{'pkey'}");
+			}
+
+			foreach (@{$join->{'columns'}}) {
+				push(@list,"$join->{'table'}.$_");
+			}
+		}
+	}
+
+	if ($self->{joins}) {
+		foreach my $join (@{$self->{joins}}) {
+			my $fkey;
+			if ($join->{fkey} =~ /\./) {
+				$fkey = $join->{fkey};
+			}
+			else {
+				$fkey = $self->{table}.'.'.$join->{fkey};
+			}
+
+			push(@joins,"LEFT JOIN $join->{'table'} ON $fkey = $join->{'table'}.$join->{'pkey'}");
+
+			foreach (@{$join->{columns}}) {
+				if ($_ =~ /\./) {
+					push(@list,$_);
+				}
+				else {
+					push(@list,$join->{'table'}.".$_");
+				}
+			}
 		}
 	}
 
@@ -632,8 +680,8 @@ sub list {
 		# 7-18-2001 added lower to make case insensitive for Postgres
 		$select_stmt .= " WHERE $limit LIKE LOWER(\"$pattern%\") ";
 
-	# FIXME!!!
-		if(ref($additional_constraint)) {
+		# FIXME!!!
+		if (ref($additional_constraint)) {
 			if(defined($additional_constraint->{'additional_constraint'})) {
 				$select_stmt .= "AND ".$additional_constraint->{'additional_constraint'};
 			}
@@ -765,6 +813,29 @@ sub view {
 		}
 	}
 
+	if ($self->{joins}) {
+		foreach my $join (@{$self->{joins}}) {
+			my $fkey;
+			if ($join->{fkey} =~ /\./) {
+				$fkey = $join->{fkey};
+			}
+			else {
+				$fkey = $self->{table}.'.'.$join->{fkey};
+			}
+
+			push(@joins,"LEFT JOIN $join->{'table'} ON $fkey = $join->{'table'}.$join->{'pkey'}");
+
+			foreach (@{$join->{columns}}) {
+				if ($_ =~ /\./) {
+					push(@list,$_);
+				}
+				else {
+					push(@list,$join->{'table'}.".$_");
+				}
+			}
+		}
+	}
+
 	my $select_statement = "
 		SELECT " .
 			join(",\n",@list). "
@@ -872,42 +943,52 @@ sub _process_params {
 	##############
 	# varchar
 	##############
-	foreach(@{$self->{'varchars'}}) {
-		if ($_->{'length'} > 0 && length($v{$_->{'name'}}) > $_->{'length'}) {
-			$errors{'BIG_'.$_->{'name'}} = 1;
+	foreach my $varchar (@{$self->{'varchars'}}) {
+		if ($varchar->{'length'} > 0 && length($v{$varchar->{'name'}}) > $varchar->{'length'}) {
+			$errors{'BIG_'.$varchar->{'name'}} = 1;
 		}
-		elsif (defined($_->{'valid'})) {
-			if ($_->{'valid'} eq "email" && length($v{$_->{'name'}}) > 0) {
-				my $c = $_;
+		elsif (defined($varchar->{'valid'})) {
+			if ($varchar->{'valid'} eq "email" && length($v{$varchar->{'name'}}) > 0) {
+				# Net::DNS does something *REMARKABLY STUPID* with $_.  No matter what you do it *ALWAYS* overwrites
+				# the value of $_ with the IP of the DNS server that responsed to the lookup request.  This localization
+				# of $_ keeps Net::DNS for pissing in everybody else's pool.
+				local $_;
+
 				my $addr;
 
 				eval {
-					$addr = Email::Valid->address('-address' => $v{$c->{'name'}},
+					$addr = Email::Valid->address('-address' => $v{$varchar->{'name'}},
 					                              '-mxcheck' => 1, 
 											      '-fqdn'    => 1 );
 				};
 				if ($@) {
-					warn "Email::Valid produced and exception: $@";
-					$errors{'BAD_'.$c->{'name'}} = 1;
+					$self->debug("Email::Valid produced an exception: $@");
+					warn "Email::Valid produced an exception: $@";
+					$errors{'BAD_'.$varchar->{'name'}} = 1;
 				}
 				elsif(!defined($addr)) {
-					$errors{'BAD_'.$c->{'name'}} = 1;
+					$errors{'BAD_'.$varchar->{'name'}} = 1;
 				}
 				else {
-					$v{$c->{'name'}} = $addr;
+					$v{$varchar->{'name'}} = $addr;
 				}
 			}
-			elsif($_->{'valid'} eq "url") {
-				if (length($v{$_->{'name'}}) && Apache::Voodoo::ValidURL::valid_url($v{$_->{'name'}}) == 0) {
-					$errors{'BAD_'.$_->{'name'}} = 1;
+			elsif($varchar->{'valid'} eq "url") {
+				if (length($v{$varchar->{'name'}}) && Apache::Voodoo::ValidURL::valid_url($v{$varchar->{'name'}}) == 0) {
+					$errors{'BAD_'.$varchar->{'name'}} = 1;
 				}
 			}
 		}
-		elsif(defined($_->{'regexp'})) {
-			 my $re = $_->{'regexp'};
-			 unless ($v{$_->{'name'}} =~ /$re/) {
-				 $errors{'BAD_'.$_->{'name'}} = 1;
+		elsif (defined($varchar->{'regexp'})) {
+			 my $re = $varchar->{'regexp'};
+			 unless ($v{$varchar->{'name'}} =~ /$re/) {
+				 $errors{'BAD_'.$varchar->{'name'}} = 1;
 			 }
+		}
+		elsif ($varchar->{length} > 0) {
+			# If there was a length restriction, than this data
+			# isn't in a text area and needs to have it's " HTML entitified
+			$v{$varchar->{'name'}} =~ s/"/\&quot;/g;
 		}
 	}
 

@@ -6,7 +6,7 @@ Apache::Voodoo::Handler - Main interface between mod_perl and Voodoo
 
 =head1 VERSION
 
-$Id: Handler.pm 4444 2007-01-19 22:52:41Z medwards $
+$Id: Handler.pm 7737 2008-08-22 14:09:03Z medwards $
 
 =head1 SYNOPSIS
  
@@ -17,18 +17,11 @@ application's page handling modules.
 =cut ################################################################################
 package Apache::Voodoo::Handler;
 
-$VERSION = '2.01';
-
 use strict;
 
-use Apache::DBI;	
-use Apache::Session::File;
+use DBI;
 
-use HTML::Template;
 use Time::HiRes;
-
-use Data::Dumper;
-$Data::Dumper::Terse = 1;
 
 use Apache::Voodoo::MP;
 use Apache::Voodoo::Constants;
@@ -40,7 +33,7 @@ use constant MP2 => ( exists $ENV{MOD_PERL_API_VERSION} and $ENV{MOD_PERL_API_VE
 			  
 # setup primary hook to mod_perl depending on which version we're running
 BEGIN {
-	if (MP2) {
+	if (1) {
 		*handler = sub : method { shift()->handle_request(@_) };
 	}
 	else {
@@ -54,12 +47,6 @@ BEGIN {
 # Thus we're left with leaving a global $self haning around long enough to copy
 # replace the first arg to our handler with it.
 my $self_init = Apache::Voodoo::Handler->new();
-
-# untie does something weird, bad and wrong.  
-# The *ONLY* way to properly untie is with the *ORIGINAL* variable that was tied too.
-# Thus, this is a global variable so that we can get to it from elsewhere in the code.
-# *barf*
-my %session;
 
 # Debugging object.  I don't like using an 'our' variable, but it is just too much
 # of a pain to pass this thing around to everywhere it needs to go. So, I just tell
@@ -176,15 +163,17 @@ sub handle_request {
 	####################
 	# Attach session
 	####################
-	$run->{'session'} = $self->attach_session($host);
+	$run->{session_handler} = $self->attach_session($host);
+	$run->{session} = $run->{session_handler}->session;
+
 	$debug->mark("session attachment");
 
 	if ($run->{'uri'} eq "logout") {
 		# handle logout
 		$self->{mp}->err_header_out("Set-Cookie" => $host->{'cookie_name'} . "='!'; path=/");
-		tied(%{$run->{'session'}})->delete();
-		$self->untie();
-		return $self->{mp}->redirect($host->{'site_root'}."index");
+		$run->{'session_handler'}->destroy();
+		return $self->{mp}->redirect($host->{'logout_target'});
+#		return $self->{mp}->redirect($host->{'site_root'}."index");
 	}
 
 	####################
@@ -201,7 +190,10 @@ sub handle_request {
 	####################
 	# history capture 
 	####################
-	if ($self->{mp}->is_get && !$run->{input_params}->{is_ajax}) {
+	if ($self->{mp}->is_get && 
+		!$run->{input_params}->{ajax_mode} &&
+		!$run->{input_params}->{return}
+		) {
 		$self->history_queue($run);
 		$debug->mark("history capture");
 	}
@@ -234,7 +226,7 @@ sub handle_request {
 	####################
 	my $return = $self->generate_html($host,$run);
 
-	$self->untie();
+	$run->{session_handler}->disconnect();
 
 	$debug->reset();
 
@@ -245,49 +237,31 @@ sub attach_session {
 	my $self = shift;
 	my $host = shift;
 
-	my ($cookie_val) = ($self->{mp}->header_in('Cookie') =~ /$host->{'cookie_name'}=([0-9a-z]+)/);
-	my $sess_id = $cookie_val;
+	my ($session_id) = ($self->{mp}->header_in('Cookie') =~ /$host->{'cookie_name'}=([0-9a-z]+)/);
+	my $instance = $host->{session_handler}->attach($session_id,$host->{dbh});
 
-	# my fist big complaint about Apache::Ssssion, 
-	# There's now way to validate a session id other then this eval.
-	eval {
-		tie(%session,'Apache::Session::File',$sess_id, 
-			{
-				Directory     => $host->{'session_dir'},
-				LockDirectory => $host->{'session_dir'}
-			}
-		) || die "Global data not available: $!";	
-	};
-	if ($@) {
-		undef $sess_id;
-		tie(%session,'Apache::Session::File',$sess_id,
-			{
-				Directory     => $host->{'session_dir'},
-				LockDirectory => $host->{'session_dir'}
-			}
-		) || die "Global data not available: $!";	
-	}
+	my $session = $instance->session;
 
 	# if this was a new session, or there was an old cookie from a previous sesion,
 	# set the session cookie.
-	if (!defined($sess_id) || $sess_id ne $cookie_val) {
+	if (!defined($session_id) || $instance->{id} ne $session_id) {
 		# err_headers get sent on both successful and errored requests
-		$self->{mp}->err_header_out("Set-Cookie" => "$host->{'cookie_name'}=$session{_session_id}; path=/");
-		$session{'timestamp'} = time;
+		$self->{mp}->err_header_out("Set-Cookie" => "$host->{'cookie_name'}=$instance->{id}; path=/");
+		$session->{'timestamp'} = time;
 	}
 
 	# see if the session has expired
-	if ($host->{'session_timeout'} > 0 && $session{'timestamp'} < (time - ($host->{'session_timeout'}*60))) {
+	if ($host->{'session_timeout'} > 0 && $session->{'timestamp'} < (time - ($host->{'session_timeout'}*60))) {
 		# use err header out since this is a redirect
 		$self->{mp}->err_header_out("Set-Cookie" => $host->{'cookie_name'} . "='!'; path=/");
-		tied(%session)->delete();
+		$instance->destroy;
 		return $self->{mp}->redirect($host->{'site_root'}."timeout");
 	}
 	else {
-		$session{'timestamp'} = time;
+		$session->{'timestamp'} = time;
 	}
 
-	return \%session;
+	return $instance;
 }
 
 sub history_queue {
@@ -314,7 +288,7 @@ sub history_queue {
 		$session->{'history'}->[0]->{'params'} = $self->mkurlparams($params);
 	}
 
-	if (scalar(@{$session->{'history'}}) > 10) {
+	if (scalar(@{$session->{'history'}}) > 30) {
 		# keep the queue at 10 items
 		pop @{$session->{'history'}};
 	}
@@ -355,18 +329,18 @@ sub generate_html {
 	my $run  = shift;
 
 	my $c=0;
-	my $t_params;
+	my $t_params = {};
 	# call each of the pre_include modules followed by our page specific module followed by our post_includes
-	foreach ( 
+	foreach my $handle ( 
 		( map { [ $_, "handle"] } split(/\s*,\s*/o, $run->{'template_conf'}->{'pre_include'}) ),
 		$host->map_uri($run->{'uri'}),
 		( map { [ $_, "handle"] } split(/\s*,\s*/o, $run->{'template_conf'}->{'post_include'}) )
 		) {
 
 
-		if (defined($host->{'handlers'}->{$_->[0]}) && $host->{'handlers'}->{$_->[0]}->can($_->[1])) {
-			my $obj    = $host->{'handlers'}->{$_->[0]};
-			my $method = $_->[1];
+		if (defined($host->{'handlers'}->{$handle->[0]}) && $host->{'handlers'}->{$handle->[0]}->can($handle->[1])) {
+			my $obj    = $host->{'handlers'}->{$handle->[0]};
+			my $method = $handle->[1];
 
 			my $return;
 			eval {
@@ -374,29 +348,31 @@ sub generate_html {
 				$return = $obj->$method(
 					{
 						"dbh"           => $host->{'dbh'},
-						"dir_config"    => $self->{mp}->dir_config,
 						"document_root" => $host->{'template_dir'},
 						"params"        => $run->{'input_params'},
 						"session"       => $run->{'session'},
 						"template_conf" => $run->{'template_conf'},
 						"themes"        => $host->{'themes'},
 						"uri"           => $run->{'uri'},
+						"mp"            => $self->{mp},
+						# these are deprecated.  In the future get them from $p->{mp}
+						"dir_config"    => $self->{mp}->dir_config,
 						"user-agent"    => $self->{mp}->header_in('User-Agent'),
-						#"r"             => $r
+						"r"             => $self->{mp}->{r}
 					}
 				);
 			};
 			if ($@) {
 				# caught a runtime error from perl
 				if ($host->{'debug'}) {
-					return $self->display_host_error("Module: $_->[0] $method\n$@");
+					return $self->display_host_error("Module: $handle->[0] $method\n$@");
 				}
 				else {
 					return $self->{mp}->server_error;
 				}
 			}
 
-			$debug->mark("handler for ".$_->[0]." ".$_->[1]);
+			$debug->mark("handler for ".$handle->[0]." ".$handle->[1]);
 
 			if (ref($return) eq "ARRAY") {
 				if    ($return->[0] eq "REDIRECTED") {
@@ -409,20 +385,32 @@ sub generate_html {
 					my $ts = Time::HiRes::time;
 					$run->{'session'}->{"er_$ts"}->{'error'}  = $return->[1];
 					$run->{'session'}->{"er_$ts"}->{'return'} = $return->[2];
-					$self->untie();
+					$run->{'session_handler'}->disconnect();
 					return $self->{mp}->redirect($host->{'site_root'}."display_error?error=$ts",1);
 				}
 				elsif ($return->[0] eq "ACCESS_DENIED") {
-					if (defined($return->[1])) {
-						if ($return->[1] =~ /^\//o) {
-							$return->[1] =~ s/^/$host->{'site_root'}/;
+					if (defined($return->[2])) {
+						# using the user supplied destination page
+						if ($return->[2] =~ /^\//o) {
+							$return->[2] =~ s/^/$host->{'site_root'}/;
 						}
-						return $self->{mp}->redirect($return->[1]);
+
+						if (defined($return->[1])) {
+							$return->[2] .= "?error=".$return->[1];
+						}
+						return $self->{mp}->redirect($return->[2]);
 					}
 					elsif (-e $host->{'template_dir'}."/access_denied.tmpl") {
-						return $self->{mp}->redirect($host->{'site_root'}."access_denied");
+						# using the default destination page
+						if (defined($return->[1])) {
+							return $self->{mp}->redirect($host->{'site_root'}."access_denied?error=".$return->[1]);
+						}
+						else {
+							return $self->{mp}->redirect($host->{'site_root'}."access_denied");
+						}
 					}
 					else {
+						# fall back on ye olde apache forbidden
 						return $self->{mp}->forbidden;
 					}
 				}
@@ -438,9 +426,8 @@ sub generate_html {
 				}
 			}
 
-			# this benchmarks about 3 times faster than any other technique. weird but true.
-			while (my ($k,$v) = each %{$return}) {
-				$t_params->{$k} = $v;
+			foreach my $k ( keys %{$return}) {
+				$t_params->{$k} = $return->{$k};
 			}
 			$debug->mark("result packing");
 		}
@@ -448,9 +435,13 @@ sub generate_html {
 
 
 	# pack up the params. note the presidence: module overrides template_conf
-	my $template_params;
-	while (my ($k,$v) = each %{$run->{'template_conf'}}) { $template_params->{$k} = $v; }
-	while (my ($k,$v) = each %{$t_params})               { $template_params->{$k} = $v; }
+	my $template_params = {};
+	foreach my $k (keys %{$run->{'template_conf'}}) { 
+		$template_params->{$k} = $run->{'template_conf'}->{$k};
+	}
+	foreach my $k (keys %{$t_params}) { 
+		$template_params->{$k} = $t_params->{$k};
+	}
 
 	my $skeleton_file;
 	if ($host->{'use_themes'}) {
@@ -481,41 +472,24 @@ sub generate_html {
 		$skeleton_file = $run->{'template_conf'}->{'skeleton'} || 'skeleton';
 	}
 
-	my $skeleton;
 	eval {
 		# load the template
-		my $template = HTML::Template->new(
-			'filename'          => $host->{'template_dir'}."/".$run->{'uri'}.".tmpl",
-			'path'              => [ $host->{'template_dir'} ],
-			'shared_cache'      => $host->{'shared_cache'},
-			'ipc_max_size'      => $host->{'ipc_max_size'},
-			'loop_context_vars' => $host->{'context_vars'},
-			'global_vars'       => 1,
-			'die_on_bad_params' => 0,
-		);
-
+		$host->{'template_engine'}->template($run->{'uri'});
 		$debug->mark("template open");
 
 		$template_params->{'SITE_ROOT'} = $host->{'site_root'};
 
 		# pack up the params
-		$template->param($template_params);
+		$host->{'template_engine'}->params($template_params);
 
 		# generate the main body contents
-		$template_params->{'_MAIN_BODY_'} = $template->output;
+		$template_params->{'_MAIN_BODY_'} = $host->{'template_engine'}->output();
 		
 		$debug->mark("main body content");
 
 		# load the skeleton template
-		$skeleton = HTML::Template->new(
-			'filename'          => $host->{'template_dir'}."/$skeleton_file.tmpl",
-			'path'              => [ $host->{'template_dir'} ],
-			'shared_cache'      => $host->{'shared_cache'},
-			'ipc_max_size'      => $host->{'ipc_max_size'},
-			'loop_context_vars' => $host->{'context_vars'},
-			'global_vars'       => 1,
-			'die_on_bad_params' => 0,
-		);
+		$host->{'template_engine'}->template($skeleton_file);
+
 		$debug->mark("skeleton open");
 
 		# generate the debugging report
@@ -526,7 +500,7 @@ sub generate_html {
 		);
 
 		# pack everything into the skeleton
-		$skeleton->param($template_params);
+		$host->{'template_engine'}->params($template_params);
 	};
 	if ($@) {
 		# caught a runtime error from perl
@@ -536,7 +510,9 @@ sub generate_html {
 	# output page
 	$self->{mp}->content_type($run->{'template_conf'}->{'content-type'} || "text/html");
 
-	$self->{mp}->print($skeleton->output);
+	$self->{mp}->print($host->{'template_engine'}->output());
+
+	$host->{'template_engine'}->finish();
 
 	$self->{mp}->flush();
 
@@ -575,13 +551,14 @@ sub restart {
 
 	foreach my $id (readdir(DIR)) {
 		next unless $id =~ /^[a-z]\w*$/i;
-		my $fp = "$install_path/$id/$cf_name";
+		my $fp = File::Spec->catfile($install_path,$id,$cf_name);
 		next unless -f $fp;
 		next unless -r $fp;
 
 		$self->{mp}->error("starting host $id");
 
-		my $conf = Apache::Voodoo::ServerConfig->new($id,$fp);
+		my $conf = Apache::Voodoo::ServerConfig->new($id,$self->{'constants'});
+		$conf->setup();
 
 		# check to see if we can get a database connection
 		foreach (@{$conf->{'dbs'}}) {
@@ -631,12 +608,6 @@ sub restart {
 		}
 	}
 	closedir(DIR);
-}
-
-sub untie {
-	my $self = shift;
-
-	untie %session;
 }
 
 1;

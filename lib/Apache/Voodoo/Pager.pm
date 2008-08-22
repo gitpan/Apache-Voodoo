@@ -6,7 +6,7 @@ Apache::Voodoo::Pager - Provides generic pagination controls
 
 =head1 VERSION
 
-$Id: Pager.pm 4269 2006-11-27 21:14:10Z medwards $
+$Id: Pager.pm 6499 2008-01-17 15:55:40Z medwards $
 
 =head1 SYNOPSIS
 
@@ -28,8 +28,6 @@ any scenario where data must be paginated.
 
 =cut ################################################################################
 package Apache::Voodoo::Pager;
-
-$VERSION = '1.21';
 
 use strict;
 use POSIX qw(ceil);
@@ -53,7 +51,7 @@ sub set_configuration {
 	$self->{'count'} = $c{'count'}   || 40;
 
 	$c{'window'} =~ s/\D//g;
-	$self->{'window'} = $c{'window'} || 15;
+	$self->{'window'} = $c{'window'} || 10;
 
 	$c{'limit'} =~ s/\D//g;
 	$self->{'limit'} = $c{'limit'}   || 500;
@@ -78,7 +76,7 @@ sub paginate {
 	my %output;
 
 	if ($res_count > $count) {
-		my $url_params = "count=$count&" . join('&', map { $_ .'='. $params->{$_} } @{$self->{'persist'}});
+		my $url_params = "count=$count&amp;" . join('&amp;', map { $_ .'='. $params->{$_} } @{$self->{'persist'}});
 
 		$output{'MODE_PARAMS'} = $url_params;
 
@@ -87,27 +85,29 @@ sub paginate {
 		if ($res_count < $self->{'limit'} && $showall) {
 			$output{'SHOW_MODE'} = 1;
 			$output{'SHOW_ALL'} = 1;
-			$output{'MODE_PARAMS'} .= "&showall=0";
+			$output{'MODE_PARAMS'} .= "&amp;showall=0";
 		}
 		else {
 			if ($res_count < $self->{'limit'}) {
-				$output{'MODE_PARAMS'} .= "&showall=1";
+				$output{'MODE_PARAMS'} .= "&amp;showall=1";
 				$output{'SHOW_MODE'} = 1;
 			}
 
 			# setup the page list
-			my $numpages = ($res_count / $count);
+			my $numpages = ceil($res_count / $count);
 			$output{'PAGE_NUMBER'}  = $page;
-			$output{'NUMBER_PAGES'} = ceil($numpages);
+			$output{'NUMBER_PAGES'} = $numpages;
 
 			if ($numpages > 1) {
 				# setup sliding window of page numbers
-				my $start = 0;
+				my $start  = 0;
 				my $window = $self->{'window'};
-				my $end   = $window;
+				my $end    = $window;
+
 				if ($page >= $window) {
-					$start = $page - ($window / 2) - 1;
-					$end   = $page + ($window / 2);
+					$end = $page + ceil($window / 2) - 1;
+
+					$start = $end - $window;
 				}
 
 				if ($end > $numpages) {
@@ -122,7 +122,7 @@ sub paginate {
 							'NOT_ME'     => (($x + 1) == $page)?0:1,
 							'PAGE'       => ($x + 1),
 							'NOT_LAST'   => 1,
-							'URL_PARAMS' => $url_params . '&page='. ($x + 1)
+							'URL_PARAMS' => $url_params . '&amp;page='. ($x + 1)
 						}
 					);
 				}
@@ -135,19 +135,22 @@ sub paginate {
 
 				# setup the 'more link'
 				if ($end != $numpages) {
-					$output{'MORE_URL_PARAMS'} =     $url_params . '&page=' . ($end + 1);
+					$output{'MORE_URL_PARAMS'} =     $url_params . '&amp;page=' . ($end + 1);
+					$output{'MORE_PAGE'} = $end+1;
 				}
 
 				# setup the preivous link
 				if ($page > 1) {
 					$output{'HAS_PREVIOUS'} = 1;
-					$output{'PREVIOUS_URL_PARAMS'} = $url_params . '&page=' . ($page - 1);
+					$output{'PREVIOUS_URL_PARAMS'} = $url_params . '&amp;page=' . ($page - 1);
+					$output{'PREV_PAGE'} = $page-1;
 				}
 
 				# setup the next link
 				if ($page * $count < $res_count) {
 					$output{'HAS_NEXT'} = 1;
-					$output{'NEXT_URL_PARAMS'} =     $url_params . '&page=' . ($page + 1);
+					$output{'NEXT_URL_PARAMS'} =     $url_params . '&amp;page=' . ($page + 1);
+					$output{'NEXT_PAGE'} = $page+1;
 				}
 			}
 		}

@@ -6,7 +6,7 @@ Apache::Voodoo::DisplayError - error message displayer
 
 =head1 VERSION
 
-$Id: DisplayError.pm 4273 2006-11-28 05:49:41Z medwards $
+$Id: DisplayError.pm 6315 2007-11-16 18:52:40Z medwards $
 
 =head1 SYNOPSIS
 
@@ -16,8 +16,6 @@ user interaction is through L<Apache::Voodoo>::display_error()
 =cut ################################################################################
 
 package Apache::Voodoo::DisplayError;
-
-$VERSION = '1.21';
 
 use strict;
 use base ("Apache::Voodoo");

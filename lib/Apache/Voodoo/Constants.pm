@@ -6,7 +6,7 @@ Apache::Voodoo::Constants - interface to Apache::Voodoo configuration settings.
 
 =head1 VERSION
 
-$Id: Constants.pm 4343 2006-12-18 23:24:03Z medwards $
+$Id: Constants.pm 6349 2007-12-03 15:31:16Z medwards $
 
 =head1 SYNOPSIS
 
@@ -14,8 +14,6 @@ This package provide an OO interface to retrive the various paths and config set
 
 =cut ###########################################################################
 package Apache::Voodoo::Constants;
-
-$VERSION = '1.22';
 
 use strict;
 use warnings;
@@ -46,16 +44,16 @@ sub new {
 	return $self;
 }
 
-sub prefix       { return $_[0]->{PREFIX};       }
-sub install_path { return $_[0]->{INSTALL_PATH}; }
-sub session_path { return $_[0]->{SESSION_PATH}; }
-sub conf_path    { return $_[0]->{CONF_PATH};    }
-sub updates_path { return $_[0]->{UPDATES_PATH}; }
-sub conf_file    { return $_[0]->{CONF_FILE};    }
-sub tmpl_path    { return $_[0]->{TMPL_PATH};    }
-sub code_path    { return $_[0]->{CODE_PATH};    }
-sub apache_uid   { return $_[0]->{APACHE_UID};   }
 sub apache_gid   { return $_[0]->{APACHE_GID};   }
+sub apache_uid   { return $_[0]->{APACHE_UID};   }
+sub code_path    { return $_[0]->{CODE_PATH};    }
+sub conf_file    { return $_[0]->{CONF_FILE};    }
+sub conf_path    { return $_[0]->{CONF_PATH};    }
+sub install_path { return $_[0]->{INSTALL_PATH}; }
+sub prefix       { return $_[0]->{PREFIX};       }
+sub session_path { return $_[0]->{SESSION_PATH}; }
+sub tmpl_path    { return $_[0]->{TMPL_PATH};    }
+sub updates_path { return $_[0]->{UPDATES_PATH}; }
 
 1;
 

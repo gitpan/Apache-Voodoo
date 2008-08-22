@@ -6,7 +6,7 @@ Apache::Voodoo::ServerConfig
 
 =head1 VERSION
 
-$Id: ServerConfig.pm 4342 2006-12-18 23:21:06Z medwards $
+$Id: ServerConfig.pm 7716 2008-08-20 20:26:58Z medwards $
 
 =head1 SYNOPSIS
 
@@ -15,10 +15,15 @@ This modules is used internally by Voodoo for application setup and module loadi
 =cut ################################################################################
 package Apache::Voodoo::ServerConfig;
 
-$VERSION = '1.21';
-
 use strict;
+use warnings;
+
 use Config::General;
+
+use Apache::Voodoo::Constants;
+use Apache::Voodoo::Template;
+use Apache::Voodoo::Session;
+
 use Data::Dumper;
 
 sub new {
@@ -28,10 +33,16 @@ sub new {
 	bless $self, $class;
 
 	$self->{'id'}        = shift;
-	$self->{'conf_file'} = shift;
+	$self->{'constants'} = shift || Apache::Voodoo::Constants->new();
 
-	if (defined($self->{'id'}) && defined($self->{'conf_file'})) {
-		$self->load();
+	if (defined($self->{'id'})) {
+		$self->{'conf_file'} = File::Spec->catfile(
+			$self->{constants}->install_path(),
+			$self->{'id'},
+			$self->{constants}->conf_file()
+		);
+
+		$self->load_config();
 	}
 	else {
 		$self->{'errors'} = "ID and configuration file paths are requried parameters";
@@ -40,11 +51,8 @@ sub new {
 	return $self;
 }
 
-sub load {
+sub setup {
 	my $self = shift;
-
-	# load the configuration file.
-	$self->load_config();
 
 	# get the list of modules we're going to use
 	foreach (keys %{$self->{'modules'}}) {
@@ -54,6 +62,8 @@ sub load {
 	foreach (keys %{$self->{'includes'}}) {
 		$self->prep_include($_);
 	}
+
+	$self->prep_template_engine();
 
 	unless($self->{'dynamic_loading'}) {
 		delete $self->{'modules'};
@@ -74,14 +84,17 @@ sub load_config {
 
 	$self->{'base_package'} = $conf{'base_package'} || $self->{'id'};
 
-	$self->{'session_dir'}     = $conf{'session_dir'};
-	$self->{'upload_size_max'} = $conf{'upload_size_max'} || 5242880;
+
 	$self->{'session_timeout'} = $conf{'session_timeout'} || 0;
+	$self->{'upload_size_max'} = $conf{'upload_size_max'} || 5242880;
 	$self->{'cookie_name'}     = $conf{'cookie_name'}     || uc($self->{'id'}). "_SID";
 	$self->{'shared_cache'}    = $conf{'shared_cache'}    || 0;
 	$self->{'ipc_max_size'}    = $conf{'ipc_max_size'}    || 0;
-	$self->{'context_vars'}    = $conf{'context_vars'}    || 0;
-	$self->{'template_conf'}   = $conf{'template_conf'}   || {};
+
+	$self->{'template_conf'} = $conf{'template_conf'} || {};
+	$self->{'template_opts'} = $conf{'template_opts'} || {};
+
+	$self->{'logout_target'} = $conf{'logout_target'} || "/index";
 
 	if (defined($conf{'devel_mode'})) {
 		if ($conf{'devel_mode'}) {
@@ -127,6 +140,24 @@ sub load_config {
 						 ];
 	}
 
+	if (defined($conf{'session_table'})) {
+		if ($self->{'dbs'}) {
+			$self->{'session_handler'} = Apache::Voodoo::Session->new('MySQL',$conf{'session_table'});
+		}
+		else {
+			print STDERR "You have sessions configured to be stored in the database but no database configuration.\n";
+			$self->{'errors'}++;
+		}
+	}
+	elsif (defined($conf{'session_dir'})) {
+		$self->{'session_handler'} = Apache::Voodoo::Session->new('File',$conf{'session_dir'});
+	}
+	else {
+		print STDERR "You do not have a session storage mechanism defined.\n";
+		$self->{'errors'}++;
+	}
+
+
 	$self->{'modules'}  = $conf{'modules'}  || {};
 	$self->{'includes'} = $conf{'includes'} || {};
 
@@ -151,6 +182,7 @@ sub load_config {
 	if (defined($conf{'themes'}) && $conf{'themes'}->{'use_themes'} == 1) {
 		$self->{'use_themes'} = 1;
 		$self->{'themes'}->{'__default__'} = $conf{'themes'}->{'default'};
+		$self->{'themes'}->{'__userset__'} = $conf{'themes'}->{'user_can_choose'};
 		my $has_one = 0;
 		foreach (@{$conf{'themes'}->{'theme'}}) {
 			$self->{'themes'}->{$_->{'name'}} = $_->{'dir'};
@@ -185,6 +217,19 @@ sub prep_include {
 	my $obj = $self->load_module($module);
 
 	$self->{'handlers'}->{$module} = $obj;
+}
+
+sub prep_template_engine { 
+	my $self = shift;
+
+	$self->{'template_engine'} = Apache::Voodoo::Template->new({
+		template_dir  => File::Spec->catfile(
+			$self->{'constants'}->install_path(),
+			$self->{'id'},
+			$self->{'constants'}->tmpl_path()
+		),
+		template_opts => $self->{'template_opts'}
+	});
 }
 
 sub map_uri {
@@ -248,6 +293,8 @@ sub refresh {
 			$self->debug("Removing old include: $_");
 			delete $self->{'handlers'}->{$_};
 		}
+
+		$self->prep_template_engine();
 	}
 }
 
@@ -275,7 +322,7 @@ sub load_module {
 
 sub debug { 
 	my $self = shift;
-	return;
+
 	return unless $self->{'debug'};
 
 	if (ref($_[0])) {

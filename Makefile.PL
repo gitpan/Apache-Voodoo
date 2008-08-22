@@ -2,6 +2,8 @@ use 5.008000;
 use ExtUtils::MakeMaker;
 
 my %required_modules = (
+		# voodoo-control uses CPAN under the hood to do some of it's work which is why it's listed here.
+		CPAN	             => 1.9205,	
 		Apache::DBI          => 0.94,
 		Apache::Session      => 1.6,
 		Config::General      => 2.27,
@@ -9,7 +11,6 @@ my %required_modules = (
 		Email::Valid         => 0.15,
 		File::Pid            => 0,
 		HTML::Template       => 2.7,
-		IPC::Shareable       => 0.6,
 		IPC::SharedCache     => 1.3,
 		Time::HiRes          => 1.65,
 		XML::Checker::Parser => 0,
@@ -42,7 +43,7 @@ else {
 
 WriteMakefile(
 	NAME          => 'Apache::Voodoo',
-	VERSION_FROM  => 'lib/Apache/Voodoo/Handler.pm',
+	VERSION_FROM  => 'lib/Apache/Voodoo.pm',
 	PREREQ_PM     => \%required_modules,
 	(
 		$] >= 5.008 ?

@@ -6,7 +6,7 @@ Apache::Voodoo::Debug - handles operations associated with debugging output.
 
 =head1 VERSION
 
-$Id: Debug.pm 4269 2006-11-27 21:14:10Z medwards $
+$Id: Debug.pm 6315 2007-11-16 18:52:40Z medwards $
 
 =head1 SYNOPSIS
 
@@ -18,12 +18,14 @@ methods from L<Apache::Voodoo>.
 =cut ###########################################################################
 package Apache::Voodoo::Debug;
 
-$VERSION = '1.21';
-
 use strict;
+
 use Time::HiRes;
 use HTML::Template;
 use Data::Dumper;
+
+$Data::Dumper::Terse = 1;
+$Data::Dumper::Sortkeys = 1;
 
 sub new {
 	my $class = shift;
@@ -104,8 +106,8 @@ sub debug {
 	}
 
 	my $mesg;
-	foreach (@_) {
-		$mesg .= (ref($_))? Dumper($_) : "$_\n";
+	foreach my $entry (@_) {
+		$mesg .= (ref($entry))? Dumper($entry) : "$entry\n";
 	}
 
 	push(@{$self->{'debug'}},[$stack,$mesg]);
@@ -139,37 +141,11 @@ sub report {
 		]
 		);
 
-		my @debug;
-		my @last;
-		foreach (@{$self->{'debug'}}) {
-			my ($stack,$mesg) = @{$_};
-	
-			my $i=0;
-			my $match = 1;
-			my ($x,$y,@stack) = split(/~/,$stack);
-			foreach (@stack) {
-				unless ($match && $_ eq $last[$i]) {
-					$match=1;
-					push(@debug,{
-						'depth' => $i,
-						'name'  => $_
-					});
-				}
-				$i++;
-			}
-	
-			@last = @stack;
-	
-			push(@debug, {
-					'depth' => ($#stack+1),
-					'name'  => $mesg
-			});
-		}
 
 		# either dumper, or the param passing to template is a little weird.
 		# if you inline the calls to dumper, it doesn't work.
 		my %h;
-		$h{'vd_debug'}    = \@debug;
+		$h{'vd_debug'}    = $self->_process_debug();
 		$h{'vd_template'} = Dumper($data{'params'});
 		$h{'vd_session'}  = Dumper($data{'session'});
 		$h{'vd_conf'}     = Dumper($data{'conf'});
@@ -178,6 +154,38 @@ sub report {
 	}
 
 	return $self->{'template'}->output;
+}
+
+sub _process_debug {
+	my $self = shift;
+
+	my @debug = ();
+	my @last  = ();
+	foreach (@{$self->{'debug'}}) {
+		my ($stack,$mesg) = @{$_};
+
+		my $i=0;
+		my $match = 1;
+		my ($x,$y,@stack) = split(/~/,$stack);
+		foreach (@stack) {
+			unless ($match && $_ eq $last[$i]) {
+				$match=1;
+				push(@debug,{
+					'depth' => $i,
+					'name'  => $_
+				});
+			}
+			$i++;
+		}
+
+		@last = @stack;
+
+		push(@debug, {
+				'depth' => ($#stack+1),
+				'name'  => $mesg
+		});
+	}
+	return \@debug;
 }
 
 1;

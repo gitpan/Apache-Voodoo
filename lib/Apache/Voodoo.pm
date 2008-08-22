@@ -2,7 +2,7 @@
 #
 # Apache::Voodoo - Base class for all Voodoo page handling modules
 #
-# $Id: Voodoo.pm 4382 2006-12-28 22:34:52Z medwards $
+# $Id: Voodoo.pm 7603 2008-08-04 17:56:15Z medwards $
 # 
 # This is the object that your modules must inherit from in order to interact correctly
 # with Voodoo.  It also provides a set of extremely useful methods.
@@ -10,7 +10,7 @@
 ####################################################################################
 package Apache::Voodoo;
 
-$VERSION = '2.00';
+$VERSION = ('$HeadURL: svn://atlas.nasba.int/Voodoo/release/2.0400/Voodoo.pm $' =~ m!([^/]+)(?:/[^/]+)\$!)[0];
 
 use strict;
 use Data::Dumper;
@@ -37,15 +37,15 @@ sub debug {
 
 	# sometimes Voodoo modules are called from outside Apache
 	# (most common case are cronjobs) 
-	if (defined($Apache::Voodoo::Handler::debug)) {
+	if (ref($Apache::Voodoo::Handler::debug)) {
 		$Apache::Voodoo::Handler::debug->debug(@_);
 	}
 	else {
 		if (ref($_[0])) {
-			print Dumper @_;
+			print STDERR Dumper @_;
 		}
 		else {
-			print join("\n",@_),"\n";
+			print STDERR join("\n",@_),"\n";
 		}
 	}
 }
@@ -74,9 +74,24 @@ sub display_error {
 
 sub access_denied {
 	shift;
-	return [ 'ACCESS_DENIED' , shift ];
+	return [ 'ACCESS_DENIED' , shift, shift ];
 }
 
+sub is_redirect      { return $_[0]->_is_a_redirect($_[1],'REDIRECTED');    }
+sub is_display_error { return $_[0]->_is_a_redirect($_[1],'DISPLAY_ERROR'); }
+sub is_access_denied { return $_[0]->_is_a_redirect($_[1],'ACCESS_DENIED'); }
+
+sub _is_a_redirect {
+	shift;
+	my $r = shift;
+	my $t = shift;
+	if (ref($r) eq "ARRAY" && $r->[0] eq $t) {
+		return $r->[1] or 1;
+	}
+	else {
+		return 0;
+	}
+}
 
 sub history {
 	my $self = shift;
@@ -92,20 +107,11 @@ sub tardis {
 
 	my %targets = map { $_ => 1 } @_;
 
-	my $uri = '/'.$p->{'uri'};
 	my $history = $p->{'session'}->{'history'};
 
-	my $find_uri=1;
 	for (my $i=0; $i <= $#{$history}; $i++) {
-		if ($find_uri) {
-			if ($uri eq $history->[$i]->{'uri'}) {
-				$find_uri = 0;
-			}
-		}
-		else {
-			if ($targets{$history->[$i]->{'uri'}}) {
-				return $self->redirect($self->history($p->{'session'},$i));
-			}
+		if ($targets{$history->[$i]->{'uri'}}) {
+			return $self->redirect($self->history($p->{'session'},$i));
 		}
 	}
 
@@ -162,7 +168,7 @@ sub mkurlparams {
 		}
 	}
 
-	return join("&",@return);
+	return join("&amp;",@return);
 }
 
 sub prep_select {
@@ -190,7 +196,7 @@ sub prep_select {
 
 sub safe_text {
 	# return $_[1] =~ /^[\w\s\.\,\/\[\]\{\}\+\=\-\(\)\:\;\&\?\*\'\!]*$/;
-	return $_[1] =~ /^[\w\s\.\,\/\[\]\{\}\+\=\-\(\)\:\;\&\?\*]*$/;
+	return $_[1] =~ /^[\w\s\.\,\/\[\]\{\}\+\=\-\(\)\:\;\&\?\!\*]*$/;
 }
 
 sub sanitize_text {
@@ -198,7 +204,7 @@ sub sanitize_text {
 	my $text = shift;
 
 	# return $_[1] =~ /^[\w\s\.\,\/\[\]\{\}\+\=\-\(\)\:\;\&\?\*\'\!]*$/;
-	$text =~ s/[^\w\s\.\,\/\[\]\{\}\+\=\-\(\)\:\;\&\?\*]/ /g;
+	$text =~ s/[^\w\s\.\,\/\[\]\{\}\+\=\-\(\)\:\;\&\?\!\*]/ /g;
 	return $text;
 }
 
@@ -325,13 +331,13 @@ sub pretty_mysql_timestamp {
 }
 
 sub mysql_timestamp { 
-        my $self = shift; 
-        my $time = shift; 
+	my $self = shift; 
+	my $time = shift; 
  
-        my @p = localtime($time || time); 
+	my @p = localtime($time || time); 
  
-        $time =~ /^\d+\.(\d+)$/; 
-        return sprintf("%04d%02d%02d%02d%02d%02d",$p[5]+1900,$p[4]+1,$p[3],$p[2],$p[1],$p[0]);
+	$time =~ /^\d+\.(\d+)$/; 
+	return sprintf("%04d%02d%02d%02d%02d%02d",$p[5]+1900,$p[4]+1,$p[3],$p[2],$p[1],$p[0]);
 }
 
 sub sql_to_date {
@@ -533,7 +539,7 @@ sub pretty_time {
 	my @p = localtime($time || time);
 
 	$time =~ /^\d+\.(\d+)$/;
-	return sprintf("%02d/%02d/%04d %02d:%02d:%02d",$p[4]+1, $p[3], $p[5]+1900, $p[3], $p[2], $p[1]) . $1;
+	return sprintf("%02d/%02d/%04d %02d:%02d:%02d",$p[4]+1, $p[3], $p[5]+1900, $p[2], $p[1], $p[0]) . $1;
 }
 
 
