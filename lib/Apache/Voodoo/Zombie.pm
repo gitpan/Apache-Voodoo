@@ -2,34 +2,46 @@
 
 =head1 NAME
 
-Apache::Voodoo::Zombie - Internal module used by Voodoo when a end user module dies on load.
-
-=head1 VERSION
-
-$Id: Zombie.pm 6522 2008-01-25 22:50:27Z medwards $
+Apache::Voodoo::Zombie - Internal module used by Voodoo when a end user module doesn't compile.
 
 =head1 SYNOPSIS
 
-This module is used by Apache::Voodoo::ServerConfig as a facimily replacement for a dead module
-when either devel_mode or debug is 1 in the application's voodoo.conf.  Any calls to this module
-displays an error message via L<Apache::Voodoo::DisplayError> describing what blew up and
-where.  This is a development tool...you shouldn't have any Zombies in your production server :)
+This module is used by Apache::Voodoo::Application as a stand in for a module that didn't compile
+when either devel_mode or debug is 1 in the application's voodoo.conf.  Any calls to this module simply
+throw an exception describing the describing the compilation error.
+This is a development tool...you shouldn't have any Zombies in your production environment :)
 
 =cut ################################################################################
 package Apache::Voodoo::Zombie;
 
+$VERSION = "3.0000";
+
 use strict;
+use warnings;
 
-use base("Apache::Voodoo");
+use Apache::Voodoo::Exception;
 
-sub module { my $self = shift; $self->{'module'} = shift; }
-sub error  { my $self = shift; $self->{'error'}  = shift; }
+sub new {
+	my $class  = shift;
+	my $module = shift;
+	my $error  = shift;
+
+	my $self = {
+		'module' => $module,
+		'error'  => $error
+	};
+
+	bless ($self,$class);
+	return $self;
+}
 
 #
 # Autoload is used to catch whatever method was supposed to be invoked
 # in the dead module.
 #
 sub AUTOLOAD { 
+	next unless ref($_[0]);
+
 	my $self = shift;
 	my $p    = shift;
 
@@ -37,37 +49,27 @@ sub AUTOLOAD {
 	my $method = $AUTOLOAD;
 	$method =~ s/.*:://;
 
-	# ya, I know...it's embeded HTML...I don't feel too bad 
-	# about it though...this is a development tool after all
-	my $error = "<pre>\n";
-	$error .= "There was an error loading the module for this page ($self->{'module'}):\n\n";
-	$error .= "$self->{'error'}\n";
-	$error .= "</pre>";
-
-	my $link = $self->{'module'};
-	
-	$link =~ s/::/\//g;
-	unless ($method eq "handle") {
-		$link =~ s/([^\/]+)$/$method."_".$1/e;
+	if (ref($Apache::Voodoo::Engine::debug)) {
+		$Apache::Voodoo::Engine::debug->error($self->{'module'},$self->{'error'});
 	}
 
-	return $self->display_error($error,"/$link");
+	Apache::Voodoo::Exception::Compilation->throw(
+		'module' => $self->{'module'},
+		'error'  => $self->{'error'}
+	);
 }
+
+# keeps autoloader from making one
+sub DESTROY {}
 
 1;
 
-=pod ################################################################################
-
-=head1 AUTHOR
-
-Maverick, /\/\averick@smurfbaneDOTorg
-
-=head1 COPYRIGHT
-
-Copyright (c) 2005 Steven Edwards.  All rights reserved.
-
-You may use and distribute Voodoo under the terms described in the LICENSE file include
-in this package or L<Apache::Voodoo::license>.  The summary is it's a legalese version
-of the Artistic License :)
-
-=cut ################################################################################
+################################################################################
+# Copyright (c) 2005-2010 Steven Edwards (maverick@smurfbane.org).
+# All rights reserved.
+#
+# You may use and distribute Apache::Voodoo under the terms described in the
+# LICENSE file include in this package. The summary is it's a legalese version
+# of the Artistic License :)
+#
+################################################################################

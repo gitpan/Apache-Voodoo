@@ -1,21 +1,13 @@
-=pod ###########################################################################
-
-=head1 NAME
-
-Apache::Voodoo::Install::Post - handles common post site setup tasks
-
-=head1 VERSION
-
-$Id: Post.pm 6538 2008-02-04 19:11:38Z medwards $
-
-=head1 SYNOPSIS
-
-This object is used by Voodoo internally.
-
-=head1 OUTPUT
-
-=cut ###########################################################################
+################################################################################
+#
+# Apache::Voodoo::Install::Post 
+#
+# Handles common post site setup tasks. This object is used by Voodoo internally.
+#
+################################################################################
 package Apache::Voodoo::Install::Post;
+
+$VERSION = "3.0000";
 
 use strict;
 use warnings;
@@ -67,18 +59,12 @@ sub do_setup_checks {
 
 1;
 
-=pod ################################################################################
-
-=head1 AUTHOR
-
-Maverick, /\/\averick@smurfbaneDOTorg
-
-=head1 COPYRIGHT
-
-Copyright (c) 2005 Steven Edwards.  All rights reserved.
-
-You may use and distribute Voodoo under the terms described in the LICENSE file include
-in this package or L<Apache::Voodoo::license>.  The summary is it's a legalese version
-of the Artistic License :)
-
-=cut ################################################################################
+################################################################################
+# Copyright (c) 2005-2010 Steven Edwards (maverick@smurfbane.org).  
+# All rights reserved.
+#
+# You may use and distribute Apache::Voodoo under the terms described in the 
+# LICENSE file include in this package. The summary is it's a legalese version
+# of the Artistic License :)
+#
+################################################################################

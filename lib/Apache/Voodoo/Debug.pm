@@ -1,207 +1,98 @@
-=pod ################################################################################
-
-=head1 NAME
-
-Apache::Voodoo::Debug - handles operations associated with debugging output.
-
-=head1 VERSION
-
-$Id: Debug.pm 6315 2007-11-16 18:52:40Z medwards $
-
-=head1 SYNOPSIS
-
-This object is used by Voodoo internally to handling various types of debugging
-information and to produce end user display of that information.  End users 
-never interact with this module directly, instead they use the debug() and mark()
-methods from L<Apache::Voodoo>.
-
-=cut ###########################################################################
 package Apache::Voodoo::Debug;
 
+$VERSION = "3.0000";
+
 use strict;
+use warnings;
 
-use Time::HiRes;
-use HTML::Template;
-use Data::Dumper;
-
-$Data::Dumper::Terse = 1;
-$Data::Dumper::Sortkeys = 1;
+use Apache::Voodoo::Constants;
 
 sub new {
 	my $class = shift;
+	my $conf  = shift;
 
 	my $self = {};
+	$self->{handlers} = [];
 
-	bless($self,$class);
+	unless (ref($conf->{'debug'}) eq "HASH") {
+		# old style config, so we'll go full monty for devel and silence for production.
+		$conf->{'debug'} = {
+			'FirePHP' => { all => 1 },
+			'Native'  => { all => 1 }
+		};
+	}
 
-	my $file = $INC{"Apache/Voodoo/Debug.pm"};
+	my @handlers;
+	foreach (keys %{$conf->{'debug'}}) {
+		if ($conf->{'debug'}->{$_}) {
+			my $package = 'Apache::Voodoo::Debug::'.$_;
+			my $file = $package.'.pm';
 
-	$file =~ s/Debug.pm/Template\/debug.tmpl/;
+			$file =~ s/::/\//g;
 
-	$self->{'template'} = HTML::Template->new(
-		'filename' => $file,
-		'die_on_bad_params' => 0,
-		'shared_cache' => 1
-	);
+			require $file;
+			push(@{$self->{handlers}}, $package->new($conf->{'id'},$conf->{'debug'}->{$_}));
 
-	$self->reset();
+		}
+	}
+
+	my $ac = Apache::Voodoo::Constants->new();
+	if ($ac->use_log4perl) {
+		require Apache::Voodoo::Debug::Log4perl;
+		my $l4p = Apache::Voodoo::Debug::Log4perl->new($conf->{'id'},$ac->log4perl_conf);
+
+		unless ($conf->{'debug'}->{'Log4perl'}) {
+			# Tomfoolery to deal with log4perl being a singlton.
+			# If the config file pulls in log4perl, we don't want to add the instance again,
+			# lest we end up with duplicated messages.
+			push(@{$self->{handlers}},$l4p);
+		}
+	}
+
+	bless $self,$class;
 
 	return $self;
 }
 
-sub reset {
+sub bootstrapped { my $self = shift; $_->bootstrapped(@_) foreach (@{$self->{'handlers'}}); }
+sub init         { my $self = shift; $_->init(@_)         foreach (@{$self->{'handlers'}}); }
+sub shutdown     { my $self = shift; $_->shutdown(@_)     foreach (@{$self->{'handlers'}}); }
+
+sub debug     { my $self = shift; $_->debug(@_)     foreach (@{$self->{'handlers'}}); }
+sub info      { my $self = shift; $_->info(@_)      foreach (@{$self->{'handlers'}}); }
+sub warn      { my $self = shift; $_->warn(@_)      foreach (@{$self->{'handlers'}}); }
+sub error     { my $self = shift; $_->error(@_)     foreach (@{$self->{'handlers'}}); }
+sub exception { my $self = shift; $_->exception(@_) foreach (@{$self->{'handlers'}}); }
+sub trace     { my $self = shift; $_->trace(@_)     foreach (@{$self->{'handlers'}}); }
+sub table     { my $self = shift; $_->table(@_)     foreach (@{$self->{'handlers'}}); }
+
+sub mark          { my $self = shift; $_->mark(@_)          foreach (@{$self->{'handlers'}}); }
+sub return_data   { my $self = shift; $_->return_data(@_)   foreach (@{$self->{'handlers'}}); }
+sub session_id    { my $self = shift; $_->session_id(@_)    foreach (@{$self->{'handlers'}}); }
+sub url           { my $self = shift; $_->url(@_)           foreach (@{$self->{'handlers'}}); }
+sub status        { my $self = shift; $_->status(@_)        foreach (@{$self->{'handlers'}}); }
+sub params        { my $self = shift; $_->params(@_)        foreach (@{$self->{'handlers'}}); }
+sub template_conf { my $self = shift; $_->template_conf(@_) foreach (@{$self->{'handlers'}}); }
+sub session       { my $self = shift; $_->session(@_)       foreach (@{$self->{'handlers'}}); }
+
+sub finalize {
 	my $self = shift;
 
-	$self->{'enabled'} = 1;
-
-	undef $self->{'debug'};
-	undef $self->{'timer'};
-
-	$self->{'template'}->clear_params();
-}
-
-sub enable {
-	my $self = shift;
-        my $set  = shift;
-
-	$self->{'enabled'} = (defined $set)?$set:1;
-}
-
-sub disable {
-	my $self = shift;
-
-	$self->{'enabled'} = 0;
-}
-
-sub mark {
-	my $self = shift;
-
-	return unless $self->{'enabled'};
-
-	push(@{$self->{'timer'}},[Time::HiRes::time,shift]);
-}
-
-sub debug {
-	my $self = shift;
-
-	return unless $self->{'enabled'};
-
-	# trace the execution stack.
-	# caller($i+1)[3] has the method that called
-	# caller($i)[2]   has the line number that method was called from
-	my $i=0;
-	my $header;
-	my $stack;
-	while (my $method = (caller($i+1))[3]) {
-		if ($method =~ /^Apache\:\:Voodoo/) {
-			$i++;
-			next;
-		}
-
-		my $line = (caller($i++))[2];
-
-		$header ||= "$method $line";
-
-		$stack = "$method~$line~$stack" unless $line == 0;
+	my @d;
+	foreach (@{$self->{handlers}}) {
+		push(@d,$_->finalize(@_));
 	}
-
-	my $mesg;
-	foreach my $entry (@_) {
-		$mesg .= (ref($entry))? Dumper($entry) : "$entry\n";
-	}
-
-	push(@{$self->{'debug'}},[$stack,$mesg]);
-
-	print STDERR "$header\n$mesg\n";
-}
-
-sub report {
-	my $self = shift;
-	my %data = @_;
-
-	push(@{$self->{'timer'}},[Time::HiRes::time,"end"]);
-
-	my $last = $#{$self->{'timer'}};
-	my $total_time = $self->{'timer'}->[$last]->[0] - $self->{'timer'}->[0]->[0];
-
-	$self->{'template'}->param('generate_time' => $total_time);
-
-	if ($self->{'enabled'}) {
-		$self->{'template'}->param('debug' => 1);
-
-		my $times = $self->{'timer'};
-		$self->{'template'}->param('vd_timing' => [
-			map {
-				{
-					'time'    => sprintf("%.5f",    $times->[$_]->[0] - $times->[$_-1]->[0]),
-					'percent' => sprintf("%5.2f%%",($times->[$_]->[0] - $times->[$_-1]->[0])/$total_time*100),
-					'message' => $times->[$_]->[1]
-				}
-			} (1 .. $last)
-		]
-		);
-
-
-		# either dumper, or the param passing to template is a little weird.
-		# if you inline the calls to dumper, it doesn't work.
-		my %h;
-		$h{'vd_debug'}    = $self->_process_debug();
-		$h{'vd_template'} = Dumper($data{'params'});
-		$h{'vd_session'}  = Dumper($data{'session'});
-		$h{'vd_conf'}     = Dumper($data{'conf'});
-
-		$self->{'template'}->param(%h);
-	}
-
-	return $self->{'template'}->output;
-}
-
-sub _process_debug {
-	my $self = shift;
-
-	my @debug = ();
-	my @last  = ();
-	foreach (@{$self->{'debug'}}) {
-		my ($stack,$mesg) = @{$_};
-
-		my $i=0;
-		my $match = 1;
-		my ($x,$y,@stack) = split(/~/,$stack);
-		foreach (@stack) {
-			unless ($match && $_ eq $last[$i]) {
-				$match=1;
-				push(@debug,{
-					'depth' => $i,
-					'name'  => $_
-				});
-			}
-			$i++;
-		}
-
-		@last = @stack;
-
-		push(@debug, {
-				'depth' => ($#stack+1),
-				'name'  => $mesg
-		});
-	}
-	return \@debug;
+	return @d;
 }
 
 1;
 
-=pod ################################################################################
-
-=head1 AUTHOR
-
-Maverick, /\/\averick@smurfbaneDOTorg
-
-=head1 COPYRIGHT
-
-Copyright (c) 2005 Steven Edwards.  All rights reserved.
-
-You may use and distribute Voodoo under the terms described in the LICENSE file include in
-this package or L<Apache::Voodoo::license>.  The summary is it's a legalese version of 
-the Artistic License :)
-
-=cut ################################################################################
+################################################################################
+# Copyright (c) 2005-2010 Steven Edwards (maverick@smurfbane.org).  
+# All rights reserved.
+#
+# You may use and distribute Apache::Voodoo under the terms described in the 
+# LICENSE file include in this package. The summary is it's a legalese version
+# of the Artistic License :)
+#
+################################################################################

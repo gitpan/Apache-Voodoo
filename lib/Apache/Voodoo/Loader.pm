@@ -1,24 +1,21 @@
-=pod #####################################################################################
-
-=head1 Apache::Voodoo::Loader
-
-$Id: Loader.pm 6315 2007-11-16 18:52:40Z medwards $
-
-=head1 Initial Coding: Maverick
-
-Base class for each of the module loading mechanisms.  Look at Loader::Static
-and Loader::Dynamic
-
-=cut ################################################################################
-
+################################################################################
+#
+# Apache::Voodoo::Loader
+#
+# Base class for each of the module loading mechanisms.  Look at Loader::Static
+# and Loader::Dynamic
+#
+################################################################################
 package Apache::Voodoo::Loader;
+
+$VERSION = "3.0000";
 
 use strict;
 use warnings;
 
 sub load_module {
-	my $self = shift;
-	my $module = shift || $self->{'module'};
+	my $self    = shift;
+	my $module  = shift || $self->{'module'};
 	
 	my $file = $module;
 	$file =~ s/::/\//go;
@@ -29,24 +26,31 @@ sub load_module {
 	# so, if you require the same module twice (or you change it on disk later)
 	# perl consults this hash and doesn't reload it.
 	# delete the entry, and perl will re-require the module from scratch
-	delete $INC{$file};
+	#
+	# We don't want to do this when the server is starting for the first time.  If
+	# we're running multiple instances of the same application, then we're just 
+	# wasting time recompiling the same modules over and over, and "warnings" will 
+	# sometimes (uselessly) yell about modules being redefined.
+	unless ($self->{'bootstrapping'}) {
+		no warnings 'redefine';
+		delete $INC{$file};
+	}
 
 	my $obj;
 	eval {
+		no warnings 'redefine';
+		local $SIG{__DIE__};
 		require $file;
-		$obj = $module->new;
+		$obj = $module->new();
 	};
 	if ($@) {
-		print STDERR "Failed to load $module: $@";
-		my $error = $@;
+		my $error = "$@";
+		$error =~ s/Compilation failed in require at .*Apache\/Voodoo\/Loader.pm line.*//;
 
 		$module =~ s/^[^:]+:://;
 
-		require "Apache/Voodoo/Zombie.pm";
-		$obj = Apache::Voodoo::Zombie->new();
-
-		$obj->module($module);
-		$obj->error($error);
+		require Apache::Voodoo::Zombie;
+		$obj = Apache::Voodoo::Zombie->new($module,$error);
 	}
 
 	return $obj;
@@ -54,18 +58,12 @@ sub load_module {
 
 1;
 
-=pod ################################################################################
-
-=head1 AUTHOR
-
-Maverick, /\/\averick@smurfbaneDOTorg
-
-=head1 COPYRIGHT
-
-Copyright (c) 2005 Steven Edwards.  All rights reserved.
-
-You may use and distribute Voodoo under the terms described in the LICENSE file include in
-this package or L<Apache::Voodoo::license>.  The summary is it's a legalese version of 
-the Artistic License :)
-
-=cut ################################################################################
+################################################################################
+# Copyright (c) 2005-2010 Steven Edwards (maverick@smurfbane.org).  
+# All rights reserved.
+#
+# You may use and distribute Apache::Voodoo under the terms described in the 
+# LICENSE file include in this package. The summary is it's a legalese version
+# of the Artistic License :)
+#
+################################################################################

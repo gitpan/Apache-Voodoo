@@ -1,5 +1,7 @@
 package Apache::Voodoo::MP::V1;
 
+$VERSION = "3.0000";
+
 use strict;
 use warnings;
 
@@ -7,64 +9,41 @@ use Apache;
 use Apache::Constants qw(OK REDIRECT DECLINED FORBIDDEN SERVER_ERROR M_GET);
 
 use Apache::Request;
+use Apache::Cookie;
 
-sub new {
-	my $class = shift;
-	my $self = {};
+use base("Apache::Voodoo::MP::Common");
 
-	bless $self,$class;
-	return $self;
-}
+sub declined     { return Apache::Constants::DECLINED;     }
+sub forbidden    { return Apache::Constants::FORBIDDEN;    }
+sub ok           { return Apache::Constants::OK;           }
+sub server_error { return Apache::Constants::SERVER_ERROR; }
+sub not_found    { return Apache::Constants::NOT_FOUND;    }
 
-sub set_request {
-	my $self = shift;
-	$self->{'r'} = shift;
-}
-
-sub declined     { return Apache::Constants::DECLINED;  }
-sub forbidden    { return Apache::Constants::FORBIDDEN; }
-sub ok           { return Apache::Constants::OK;        }
-sub server_error { return Apache::Constants::FORBIDDEN; }
-
-sub content_type     { shift()->{'r'}->send_http_header(@_); }
-sub dir_config       { shift()->{'r'}->dir_config(@_); }
-sub err_header_out   { shift()->{'r'}->err_header_out(@_); }
-sub filename         { shift()->{'r'}->filename(); }
-sub flush            { shift()->{'r'}->rflush(); }
-sub header_in        { shift()->{'r'}->header_in(@_); }
-sub header_out       { shift()->{'r'}->header_out(@_); }
-sub method           { shift()->{'r'}->method(@_); }
-sub print            { shift()->{'r'}->print(@_); }
-sub uri              { shift()->{'r'}->uri(); }
-
-sub is_get     { return $_[0]->{r}->method eq "GET"; }
-sub get_app_id { return $_[0]->{r}->dir_config("ID"); }
-sub site_root  { return $_[0]->{r}->dir_config("SiteRoot") || "/"; }
+sub content_type   { shift()->{'r'}->send_http_header(@_); }
+sub err_header_out { shift()->{'r'}->err_header_out(@_); }
+sub header_in      { shift()->{'r'}->header_in(@_); }
+sub header_out     { shift()->{'r'}->header_out(@_); }
 
 sub redirect {
-        my $self = shift;
-        my $loc  = shift;
-        my $internal = shift;
+	my $self = shift;
+	my $loc  = shift;
 
-        my $r = $self->{'r'};
-        if ($r->method eq "POST") {
-                $r->method_number(Apache::Constants::M_GET);
-                $r->method('GET');
-                $r->headers_in->unset('Content-length');
+	if ($loc) {
+		my $r = $self->{'r'};
+		if ($r->method eq "POST") {
+			$r->method_number(Apache::Constants::M_GET);
+			$r->method('GET');
+			$r->headers_in->unset('Content-length');
 
-                $r->header_out("Location" => $loc);
-                $r->status(Apache::Constants::REDIRECT);
-                $r->send_http_header;
-                return Apache::Constants::REDIRECT;
-        }
-        elsif ($internal) {
-                $r->internal_redirect($loc);
-                return Apache::Constants::OK;
-        }
-        else {
-                $r->header_out("Location" => $loc);
-                return Apache::Constants::REDIRECT;
-        }
+			$r->header_out("Location" => $loc);
+			$r->status(Apache::Constants::REDIRECT);
+			$r->send_http_header;
+		}
+		else {
+			$r->header_out("Location" => $loc);
+		}
+	}
+	return Apache::Constants::REDIRECT;
 }
 
 sub parse_params {
@@ -97,45 +76,56 @@ sub parse_params {
    	return \%params;
 }
 
+sub set_cookie {
+	my $self = shift;
 
+	my $name    = shift;
+	my $value   = shift;
+	my $expires = shift;
 
-sub warn  { shift()->_log('warn',@_);  }
-sub error { shift()->_log('error',@_); }
+	my $c = Apache::Cookie->new($self->{r},
+		-name     => $name,
+		-value    => $value,
+		-path     => '/',
+		-domain   => $self->{'r'}->get_server_name()
+	);
 
-sub _log {
-	my $self  = shift;
-	my $level = shift;
+	if ($expires) {
+		$c->expires($expires);
+	}
 
-	my $r;
-	if (defined($self->{r})) {
-		$r = $self->{r};
+	# I don't use Apache2::Cookie's bake since it doesn't support setting the HttpOnly flag.
+	# The argument goes something like "Not every browser supports it, so what's the point?"
+	# Isn't that a bit like saying "What's the point in wearing this bullet proof vest if it
+	# doesn't stop a round from a tank?"
+	$self->err_header_out('Set-Cookie' => $c->as_string()."; HttpOnly");
+}
+
+sub get_cookie {
+	my $self = shift;
+
+	unless (defined($self->{cookiejar})) {
+		# cookies haven't be parsed yet.
+		$self->{cookiejar} = Apache::Cookie::Jar->new($self->{r});
+	}
+
+	my $c = $self->{cookiejar}->cookies(shift);
+	if (defined($c)) {
+		return $c->value;
 	}
 	else {
-		# $r = Apache->server;
-	}
-
-	if (defined($r)) {
-		foreach (@_) {
-			if (ref($_)) {
-				$r->log->$level(Dumper $_);
-			}
-			else {
-				$r->log->$level($_);
-			}
-		}
-	}
-	else {
-		# Neither request nor server are present.  Fall back to
-		# ye olde STDERR
-		foreach (@_) {
-			if (ref($_)) {
-				print STDERR Dumper $_,"\n";
-			}
-			else {
-				print STDERR $_,"\n";
-			}
-		}
+		return undef;
 	}
 }
 
 1;
+
+################################################################################
+# Copyright (c) 2005-2010 Steven Edwards (maverick@smurfbane.org).  
+# All rights reserved.
+#
+# You may use and distribute Apache::Voodoo under the terms described in the 
+# LICENSE file include in this package. The summary is it's a legalese version
+# of the Artistic License :)
+#
+################################################################################

@@ -1,27 +1,19 @@
-####################################################################################
-#
-# Apache::Voodoo - Base class for all Voodoo page handling modules
-#
-# $Id: Voodoo.pm 7603 2008-08-04 17:56:15Z medwards $
-# 
-# This is the object that your modules must inherit from in order to interact correctly
-# with Voodoo.  It also provides a set of extremely useful methods.
-#
-####################################################################################
 package Apache::Voodoo;
 
-$VERSION = ('$HeadURL: svn://atlas.nasba.int/Voodoo/release/2.0400/Voodoo.pm $' =~ m!([^/]+)(?:/[^/]+)\$!)[0];
+$VERSION = "3.0000";
 
 use strict;
+use warnings;
+
 use Data::Dumper;
+use Time::HiRes;
+use Apache::Voodoo::Exception;
 
 sub new {
 	my $class = shift;
 	my $self = {};
 
 	bless $self, $class;
-
-	$self->init(@_);
 
 	return $self;
 }
@@ -35,62 +27,144 @@ sub init { }
 sub debug { 
 	my $self = shift;
 
-	# sometimes Voodoo modules are called from outside Apache
-	# (most common case are cronjobs) 
-	if (ref($Apache::Voodoo::Handler::debug)) {
-		$Apache::Voodoo::Handler::debug->debug(@_);
+	if (ref($Apache::Voodoo::Engine::debug)) {
+		$Apache::Voodoo::Engine::debug->debug(@_);
 	}
-	else {
-		if (ref($_[0])) {
-			print STDERR Dumper @_;
-		}
-		else {
-			print STDERR join("\n",@_),"\n";
-		}
+}
+
+sub info {
+	my $self = shift;
+
+	if (ref($Apache::Voodoo::Engine::debug)) {
+		$Apache::Voodoo::Engine::debug->info(@_);
+	}
+}
+
+sub warn {
+	my $self = shift;
+
+	if (ref($Apache::Voodoo::Engine::debug)) {
+		$Apache::Voodoo::Engine::debug->warn(@_);
+	}
+}
+
+sub error {
+	my $self = shift;
+
+	if (ref($Apache::Voodoo::Engine::debug)) {
+		$Apache::Voodoo::Engine::debug->error(@_);
+	}
+}
+
+sub exception {
+	my $self = shift;
+
+	if (ref($Apache::Voodoo::Engine::debug)) {
+		$Apache::Voodoo::Engine::debug->exception(@_);
+	}
+	Apache::Voodoo::Exception::RunTime::Thrown->throw(join("\n",@_));
+}
+
+sub trace { 
+	my $self = shift;
+
+	if (ref($Apache::Voodoo::Engine::debug)) {
+		$Apache::Voodoo::Engine::debug->trace(@_);
+	}
+}
+
+sub table { 
+	my $self = shift;
+
+	if (ref($Apache::Voodoo::Engine::debug)) {
+		$Apache::Voodoo::Engine::debug->table(@_);
 	}
 }
 
 sub mark {
 	my $self = shift;
 
-	if (defined($Apache::Voodoo::Handler::debug)) {
-		$Apache::Voodoo::Handler::debug->mark(@_);
+	if (defined($Apache::Voodoo::Engine::debug)) {
+		$Apache::Voodoo::Engine::debug->mark(Time::HiRes::time, @_);
 	}
 }
 
 ################################################################################
-# Redirection
+# Behavior control
 ################################################################################
+
+sub set_view {
+	$_[1]->{_view_} = $_[2];
+}
+
+sub stop_chain {
+	$_[1]->{_stop_chain_} = 1;
+}
 
 sub redirect {
 	shift;
-   	return [ "REDIRECTED" , shift ];
+	Apache::Voodoo::Exception::Application::Redirect->throw(target => shift);
 }
 
 sub display_error {
 	shift;
-   	return [ "DISPLAY_ERROR", shift, shift ];
+	my ($c,$e,$t);
+	if (@_ == 3) {
+		($c,$e,$t) = @_;
+	}
+	elsif (@_ >= 2 && $_[0] =~ /^\s*[\w:\.-]+\s*$/) {
+		$c = shift;
+		$e = shift;
+		$t = shift || '/index';
+	}
+	else {
+		$c = '500';
+		$e = shift;
+		$t = shift || '/index';
+	}
+
+	if (ref($t)) {
+		Apache::Voodoo::Exception::Application::DisplayError->throw(
+			code   => $c,
+			error  => $e,
+			detail => $t
+		);
+	}
+	else {
+		Apache::Voodoo::Exception::Application::DisplayError->throw(
+			code   => $c,
+			error  => $e,
+			target => $t
+		);
+	}
 }
 
 sub access_denied {
 	shift;
-	return [ 'ACCESS_DENIED' , shift, shift ];
-}
+	my $m = shift || "Access Denied";
+	my $t = shift || "/access_denied";
 
-sub is_redirect      { return $_[0]->_is_a_redirect($_[1],'REDIRECTED');    }
-sub is_display_error { return $_[0]->_is_a_redirect($_[1],'DISPLAY_ERROR'); }
-sub is_access_denied { return $_[0]->_is_a_redirect($_[1],'ACCESS_DENIED'); }
-
-sub _is_a_redirect {
-	shift;
-	my $r = shift;
-	my $t = shift;
-	if (ref($r) eq "ARRAY" && $r->[0] eq $t) {
-		return $r->[1] or 1;
+	if (ref($t)) {
+		Apache::Voodoo::Exception::Application::AccessDenied->throw(
+			error  => $m,
+			detail => $t
+		);
 	}
 	else {
-		return 0;
+		Apache::Voodoo::Exception::Application::AccessDenied->throw(
+			error  => $m,
+			target => $t
+		);
 	}
+}
+
+sub raw_mode {
+	my ($self,$c,$d,$h) = @_;
+	Apache::Voodoo::Exception::Application::RawData->throw(
+		"content_type" => $c,
+		"data"         => $d,
+		"headers"      => $h
+	);
 }
 
 sub history {
@@ -222,6 +296,7 @@ sub trim {
 # Database Interaction
 ################################################################################
 
+# deprecated, dbi uses exceptions now.
 sub db_error {
 	my @caller = caller(1);
 
@@ -344,7 +419,7 @@ sub sql_to_date {
 	my $self = shift;
 	my $date = shift;
 
-	if ($date eq "NULL" || $date eq "") {
+	if (!defined($date) || $date eq "NULL" || $date =~ /^\s*$/) {
 		return "";
 	}
 
@@ -359,7 +434,7 @@ sub sql_to_time {
 	my $self = shift;
 	my $time = shift;
 
-	if ($time eq "NULL" || $time eq "") {
+	if (!defined($time) || $time eq "NULL" || $time =~ /^\s*$/) {
 		return "";
 	}
 
@@ -418,10 +493,6 @@ sub time_to_sql {
 # Misc
 ################################################################################
 
-sub raw_mode {
-	shift;
-	return [ 'RAW_MODE' , @_ ];
-}
 
 # Function:  dates_in_order
 # Purpose:  Make sure end date comes after start date
@@ -531,7 +602,6 @@ sub validate_date {
 	return 1;
 }
 
-
 sub pretty_time {
 	my $self = shift;
 	my $time = shift;
@@ -539,24 +609,23 @@ sub pretty_time {
 	my @p = localtime($time || time);
 
 	$time =~ /^\d+\.(\d+)$/;
-	return sprintf("%02d/%02d/%04d %02d:%02d:%02d",$p[4]+1, $p[3], $p[5]+1900, $p[2], $p[1], $p[0]) . $1;
-}
+	my $ms = $1;
+	if ($ms) {
+		$ms .= '0' x (5-length($ms));
 
+		$ms = " " . $ms;
+	}
+	return sprintf("%02d/%02d/%04d %02d:%02d:%02d",$p[4]+1, $p[3], $p[5]+1900, $p[2], $p[1], $p[0]) . $ms;
+}
 
 1;
 
 ################################################################################
+# Copyright (c) 2005-2010 Steven Edwards (maverick@smurfbane.org).  
+# All rights reserved.
 #
-# AUTHOR
-#
-# Maverick, /\/\averick@smurfbaneDOTorg
-#
-# COPYRIGHT
-#
-# Copyright (c) 2005 Steven Edwards.  All rights reserved.
-#
-# You may use and distribute Voodoo under the terms described in the
-# LICENSE file include in this package or L<Apache::Voodoo::license>.  The summary is it's a legalese version of 
-# the Artistic License :)
+# You may use and distribute Apache::Voodoo under the terms described in the 
+# LICENSE file include in this package. The summary is it's a legalese version
+# of the Artistic License :)
 #
 ################################################################################

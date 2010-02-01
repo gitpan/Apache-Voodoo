@@ -1,17 +1,23 @@
-# $Id: Dynamic.pm 6315 2007-11-16 18:52:40Z medwards $
 package Apache::Voodoo::Loader::Dynamic;
 
+$VERSION = "3.0000";
+
 use strict;
+use warnings;
+
 use base("Apache::Voodoo::Loader");
 
 sub new {
 	my $class = shift;
+
 	my $self = {};
 	bless $self,$class;
 
 	$self->{'module'} = shift;
 
+	$self->{'bootstrapping'} = 1;
 	$self->refresh;
+	$self->{'bootstrapping'} = 0;
 
 	$self->{'parents'} = {};
 	foreach (eval '@{'.$self->{'module'}.'::ISA}') {
@@ -19,6 +25,13 @@ sub new {
 	}
 
 	return $self;
+}
+
+sub init {
+	my $self = shift;
+
+	$self->{'config'} = \@_;
+	$self->{'object'}->init(@_);
 }
 
 sub get_mtime {
@@ -43,49 +56,80 @@ sub refresh {
 	foreach my $method (keys %{$self->{'provides'}}) {
 		# a little help from the Cookbook 10.14
 		no strict 'refs';
+		no warnings 'redefine';
 		*$method = undef;
 	}
 	$self->{'provides'} = {};
 }
 
 # 
-# Override the build in 'can' to allow:
+# Override the built in 'can' to allow:
 #   a) trigger dynamically reloading the module as needed
-#   b) dynamically create closures to link Apache::Voodoo::Handler with userland modules
-# 
-# This has some nice side effects.  
-#   Static vs Dynamic loading is totally transparent to the interaction 
-#   between Voodoo and userland modules.  
-#   Certain method names are no longer 'magical' and visible to Voodoo by default.
-#   There's no longer any need to 'register' non magical methods with Voodoo.
+#   b) dynamically create closures to link Apache::Voodoo::Handler with the controllers
 #
 sub can {
-	my $self = shift;
+	my $self   = shift;
 	my $method = shift;
+	my $nosub  = shift;
 
 	# find out if this thing has changed
 	if ($self->{'mtime'} != $self->get_mtime) {
 		$self->refresh;
+		$self->{'object'}->init(@{$self->{'config'}});
 	}
 
 	if (defined $self->{'provides'}->{$method}) {
 		return 1;
 	}
-	elsif ($self->{'object'}->isa("Apache::Voodoo::Zombie") || $self->{'object'}->can($method)) {
-		# either we have a dead module and we map whatever was requested or
-		# we have a live one and it can do the requested method
+	elsif (1||$self->{'object'}->isa("Apache::Voodoo::Zombie") || $self->{'object'}->can($method)) {
+		# Either we have a dead module and we map whatever was requested or
+		# we have a live one and has the requested method.
 
 		# cache the existance of this method
 		$self->{'provides'}->{$method} = 1;
 
-		# create a closeure for this method (a little help from the Cookbook 10.14)
-		no strict 'refs';
-		*$method = sub { my $self = shift; return $self->_handle($method,@_); };
+		# If we used the autoloader to get here, then we want to keep using
+		# it. Bypass the creation of the closure.
+		unless ($nosub) {
+			# create a closeure for this method (a little help from the Cookbook 10.14)
+			no strict 'refs';
+			no warnings 'redefine';
+			*$method = sub { my $self = shift; return $self->_handle($method,@_); };
+		}
 		return 1;
 	}
 
 	return 0;
 }
+
+#
+# In scnearios where the caller doesn't know that can has been overloaded, we'll use
+# autoload to catch it and call our overloaded can.  We unfortunately end up with two 
+# different ways to do a very similar task because the constraints are slightly different.
+# We want the calls from the A::V::Handler to the controllers to be aware of what methods
+# actually exist so it can either call them or not.  The controllers talking to the models
+# shouldn't have to do anything special or even be aware that they're talking to this 
+# proxy object, thus the need for a autoload variation.
+#
+sub AUTOLOAD {
+	next unless ref($_[0]);
+
+	our $AUTOLOAD;
+	my $method = $AUTOLOAD;
+	$method =~ s/.*:://;
+
+	my $self = shift;
+
+	if ($self->can($method,'1')) {
+		return $self->_handle($method,@_);
+	}
+
+	# we don't handle this one
+	next;
+}
+
+# now we need a stub for destroy to keep autoloader happy.
+sub DESTROY { }
 
 sub _handle {
 	my $self = shift;
@@ -93,22 +137,23 @@ sub _handle {
 	my @params = @_;
 
 	# check parent modules for change
-	foreach (eval '@{'.$self->{'module'}.'::ISA}') {
-		my $t = $self->get_mtime($_);
-		if ($self->{'parents'}->{$_} != $t) {
-			$self->{'parents'}->{$_} = $t;
+	foreach my $module (eval '@{'.$self->{'module'}.'::ISA}') {
+		my $t = $self->get_mtime($module);
+		if ($self->{'parents'}->{$module} != $t) {
+			$self->{'parents'}->{$module} = $t;
 
-			$_ =~ s/::/\//go;
-			$_ .= ".pm";
-			delete $INC{$_};
+			my $file = $module;
+			$file =~ s/::/\//go;
+			$file .= ".pm";
+
+			no warnings 'redefine';
+			delete $INC{$file};
 			eval {
-				require $_;
+				no warnings 'redefine';
+				require $file;
 			};
 			if ($@) {
-				my $error = "<pre>\n";
-				$error .= "There was an error loading one of the base classes for this page ($_):\n\n";
-				$error .= "$@\n";
-				$error .= "</pre>";
+				my $error= "There was an error loading one of the base classes for this page ($_):\n\n$@\n";
 
 				my $link = $self->{'module'};
 				
@@ -129,18 +174,12 @@ sub _handle {
 
 1;
 
-=pod ################################################################################
-
-=head1 AUTHOR
-
-Maverick, /\/\averick@smurfbaneDOTorg
-
-=head1 COPYRIGHT
-
-Copyright (c) 2005 Steven Edwards.  All rights reserved.
-
-You may use and distribute Voodoo under the terms described in the LICENSE file include
-in this package or L<Apache::Voodoo::license>.  The summary is it's a legalese version
-of the Artistic License :)
-
-=cut ################################################################################
+################################################################################
+# Copyright (c) 2005-2010 Steven Edwards (maverick@smurfbane.org).  
+# All rights reserved.
+#
+# You may use and distribute Apache::Voodoo under the terms described in the 
+# LICENSE file include in this package. The summary is it's a legalese version
+# of the Artistic License :)
+#
+################################################################################

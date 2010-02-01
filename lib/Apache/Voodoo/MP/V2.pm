@@ -1,77 +1,56 @@
 package Apache::Voodoo::MP::V2;
 
+$VERSION = "3.0000";
+
 use strict;
 use warnings;
 
-use Apache2::Const;
+use Apache2::Const qw(OK REDIRECT DECLINED FORBIDDEN AUTH_REQUIRED SERVER_ERROR NOT_FOUND M_GET);
+
 use Apache2::RequestRec;
 use Apache2::RequestIO;
 use Apache2::SubRequest;
 use Apache2::RequestUtil;
-
+use Apache2::Response;
 
 use Apache2::Request;
 use Apache2::Upload;
+use Apache2::Cookie;
 
-Apache2::Const->import(-compile => qw(OK REDIRECT DECLINED FORBIDDEN SERVER_ERROR M_GET));
+use base("Apache::Voodoo::MP::Common");
 
-sub new {
-	my $class = shift;
-	my $self = {};
-
-	bless $self,$class;
-	return $self;
-}
-
-sub set_request {
-	my $self = shift;
-	$self->{'r'} = shift;
-}
-
-sub declined     { return Apache2::Const::DECLINED();     }
-sub forbidden    { return Apache2::Const::FORBIDDEN();    }
-sub ok           { return Apache2::Const::OK();           }
-sub server_error { return Apache2::Const::SERVER_ERROR(); }
+sub declined     { return Apache2::Const::DECLINED;     }
+sub forbidden    { return Apache2::Const::FORBIDDEN;    }
+sub unauthorized { return Apache2::Const::AUTH_REQUIRED;}
+sub ok           { return Apache2::Const::OK;           }
+sub server_error { return Apache2::Const::SERVER_ERROR; }
+sub not_found    { return Apache2::Const::NOT_FOUND;    }
 
 sub content_type   { shift()->{'r'}->content_type(@_); }
-sub dir_config     { shift()->{'r'}->dir_config(@_); }
 sub err_header_out { shift()->{'r'}->err_headers_out->add(@_); }
-sub filename       { shift()->{'r'}->filename(); }
-sub flush          { shift()->{'r'}->rflush(); }
 sub header_in      { shift()->{'r'}->headers_in->{shift()}; }
 sub header_out     { shift()->{'r'}->headers_out->add(@_); }
-sub method         { shift()->{'r'}->method(@_); }
-sub print          { shift()->{'r'}->print(@_); }
-sub uri            { shift()->{'r'}->uri(); }
-
-sub is_get     { return ($_[0]->{r}->method eq "GET"); }
-sub get_app_id { return $_[0]->{r}->dir_config("ID"); }
-sub site_root  { return $_[0]->{r}->dir_config("SiteRoot") || "/"; }
 
 sub redirect {
 	my $self = shift;
 	my $loc  = shift;
-	my $internal = shift;
 
-	my $r = $self->{'r'};
-	if ($r->method eq "POST") {
-		$r->method_number(Apache2::Const::M_GET());
-		$r->method('GET');
-		$r->headers_in->unset('Content-length');
+	if ($loc) {
+		my $r = $self->{'r'};
+		if ($r->method eq "POST") {
+			$r->method_number(Apache2::Const::M_GET);
+			$r->method('GET');
+			$r->headers_in->unset('Content-length');
 
-		$r->headers_out->add("Location" => $loc);
-		$r->status(Apache2::Const::REDIRECT());
-		$r->content_type;
-		return Apache2::Const::REDIRECT();
+			$r->headers_out->add("Location" => $loc);
+			$r->status(Apache2::Const::REDIRECT);
+			$r->content_type;
+		}
+		else {
+			$r->headers_out->add("Location" => $loc);
+		}
 	}
-	elsif ($internal) {
-		$r->internal_redirect($loc);
-		return Apache2::Const::OK();
-	}
-	else {
-		$r->headers_out->add("Location" => $loc);
-		return Apache2::Const::REDIRECT();
-	}
+	return Apache2::Const::REDIRECT;
 }
 
 sub parse_params {
@@ -115,44 +94,56 @@ sub parse_params {
    	return \%params;
 }
 
+sub set_cookie {
+	my $self = shift;
 
-sub warn  { shift()->_log('warn',@_);  }
-sub error { shift()->_log('error',@_); }
+	my $name    = shift;
+	my $value   = shift;
+	my $expires = shift;
 
-sub _log {
-	my $self  = shift;
-	my $level = shift;
+	my $c = Apache2::Cookie->new($self->{r},
+		-name     => $name,
+		-value    => $value,
+		-path     => '/',
+		-domain   => $self->{'r'}->get_server_name()
+	);
 
-	my $r;
-	if (defined($self->{r})) {
-		$r = $self->{r};
+	if ($expires) {
+		$c->expires($expires);
+	}
+
+	# I didn't use Apache2::Cookie's bake since it doesn't support setting the HttpOnly flag.
+	# The argument setting the flag goes something like "Not every browser supports it, 
+	# so what's the point?"  Which seems to me to be a bit like saying "What's the point 
+	# in wearing this bullet proof vest if it doesn't stop a shell from a tank?"
+	$self->err_header_out('Set-Cookie' => "$c; HttpOnly");
+}
+
+sub get_cookie {
+	my $self = shift;
+
+	unless (defined($self->{cookiejar})) {
+		# cookies haven't be parsed yet.
+		$self->{cookiejar} = Apache2::Cookie::Jar->new($self->{r});
+	}
+
+	my $c = $self->{cookiejar}->cookies(shift);
+	if (defined($c)) {
+		return $c->value;
 	}
 	else {
-#		$r = Apache2->server;
-	}
-
-	if (defined($r)) {
-		foreach (@_) {
-			if (ref($_)) {
-				$r->log->$level(Dumper $_);
-			}
-			else {
-				$r->log->$level($_);
-			}
-		}
-	}
-	else {
-		# Neither request nor server are present.  Fall back to
-		# ye olde STDERR
-		foreach (@_) {
-			if (ref($_)) {
-				print STDERR Dumper $_,"\n";
-			}
-			else {
-				print STDERR $_,"\n";
-			}
-		}
+		return undef;
 	}
 }
 
 1;
+
+################################################################################
+# Copyright (c) 2005-2010 Steven Edwards (maverick@smurfbane.org).  
+# All rights reserved.
+#
+# You may use and distribute Apache::Voodoo under the terms described in the 
+# LICENSE file include in this package. The summary is it's a legalese version
+# of the Artistic License :)
+#
+################################################################################

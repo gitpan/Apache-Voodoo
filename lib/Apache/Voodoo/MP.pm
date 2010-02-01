@@ -1,9 +1,13 @@
-=pod ###########################################################################
-Factory that creates either a MP1 or MP2 object depending on whether or not
-we're running under mod_perl 1 or 2.  This saves us from having to write, and
-clutter up the code with, a load of conditionals in the Handler.
-=cut ###########################################################################
+################################################################################
+#
+# Factory that creates either a MP1 or MP2 object depending on whether or not
+# we're running under mod_perl 1 or 2.  This saves us from having to write, and
+# clutter up the code with, a load of conditionals in the Handler.
+#
+################################################################################
 package Apache::Voodoo::MP;
+
+$VERSION = "3.0000";
 
 use strict;
 use warnings;
@@ -22,3 +26,13 @@ sub new {
 }
 
 1;
+
+################################################################################
+# Copyright (c) 2005-2010 Steven Edwards (maverick@smurfbane.org).  
+# All rights reserved.
+#
+# You may use and distribute Apache::Voodoo under the terms described in the 
+# LICENSE file include in this package. The summary is it's a legalese version
+# of the Artistic License :)
+#
+################################################################################
