@@ -9,7 +9,7 @@
 ################################################################################
 package Apache::Voodoo::Handler;
 
-$VERSION = "3.0002";
+$VERSION = "3.0100";
 
 use strict;
 
@@ -59,7 +59,7 @@ sub handler {
 
 	########################################
 	# We now know we have a valid request that we need to handle,
-	# Get the engine ready to server it.
+	# Get the engine ready to serve it.
 	########################################
 	eval {
 		$self->{'engine'}->init_app();

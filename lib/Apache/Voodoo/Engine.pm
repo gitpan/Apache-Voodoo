@@ -1,6 +1,6 @@
 package Apache::Voodoo::Engine;
 
-$VERSION = "3.0002";
+$VERSION = "3.0100";
 
 use strict;
 use warnings;
@@ -37,12 +37,9 @@ sub new {
 
 	$self->{'mp'} = $opts{'mp'};
 
-	$self->{constants} = Apache::Voodoo::Constants->new();
+	$self->{'constants'} = $opts{'constants'} || Apache::Voodoo::Constants->new();
 
-	if (exists $ENV{'MOD_PERL'}) {
-		# let's us do a compile check outside of mod_perl
-		$self->restart;
-	}
+	$self->restart($opts{'only_start'});
 
 	# Setup signal handler for die so that all deaths become exception objects
 	# This way we can get a stack trace from where the death occurred, not where it was caught.
@@ -76,7 +73,6 @@ sub get_apps {
 
 sub is_devel_mode {
 	my $self = shift;
-	return 1;
 	return ($self->{'run'}->{'config'}->{'devel_mode'})?1:0;
 }
 
@@ -135,20 +131,33 @@ sub begin_run {
 	$debug->init($self->{'mp'});
 	$debug->mark(Time::HiRes::time,"START");
 
-	$run->{'session_handler'} = $self->attach_session($app,$run->{'config'});
+	$run->{'session_handler'} = $self->attach_session();
 	$run->{'session'} = $run->{'session_handler'}->session;
 
-	foreach (@{$app->databases}) {
-		eval {
-			$run->{'dbh'} = DBI->connect_cached(@{$_});
-		};
-		last if $run->{'dbh'};
-	
-		Apache::Voodoo::Exception::DBIConnect->throw($DBI::errstr);
-	}
+	$debug->session_id($run->{'session_handler'}->{'id'});
+	$debug->mark(Time::HiRes::time,'Session Attachment');
+
+	$run->{'dbh'} = $self->attach_db();
+
 	$debug->mark(Time::HiRes::time,'DB Connect');
 
 	return 1;
+}
+
+sub attach_db {
+	my $self = shift;
+
+	my $db = undef;
+	foreach (@{$self->{'run'}->{'app'}->databases}) {
+		eval {
+			$db = DBI->connect_cached(@{$_});
+		};
+		last if $db;
+	
+		Apache::Voodoo::Exception::DBIConnect->throw($DBI::errstr);
+	}
+
+	return $db;
 }
 
 sub parse_params {
@@ -164,7 +173,7 @@ sub parse_params {
 	return $params;
 }
 
-sub finish {
+sub status {
 	my $self   = shift;
 	my $status = shift;
 
@@ -172,6 +181,13 @@ sub finish {
 		$debug->session($self->{'run'}->{'session'});
 		$debug->status($status);
 	}
+}
+
+sub finish {
+	my $self   = shift;
+	my $status = shift;
+
+	$self->status($status);
 
 	if (defined($self->{'run'}) && defined($self->{'run'}->{'session_handler'})) {
 		if ($self->{'run'}->{'p'}->{'uri'} =~ /\/?logout(_[^\/]+)?$/) {
@@ -193,8 +209,9 @@ sub finish {
 
 sub attach_session {
 	my $self = shift;
-	my $app  = shift;
-	my $conf = shift;
+
+	my $app  = $self->{'run'}->{'app'};
+	my $conf = $self->{'run'}->{'config'};
 
 	my $session_id = $self->{'mp'}->get_cookie($conf->{'cookie_name'});
 	my $session = $app->{'session_handler'}->attach($session_id,$self->{'run'}->{'dbh'});
@@ -216,9 +233,6 @@ sub attach_session {
 
 	# update the session timer
 	$session->touch();
-
-	$debug->session_id($session->{'id'});
-	$debug->mark(Time::HiRes::time,'Session Attachment');
 
 	return $session;
 }
@@ -252,6 +266,21 @@ sub history_capture {
 	}
 
 	$debug->mark(Time::HiRes::time,"history capture");
+}
+
+sub get_model {
+	my $self   = shift;
+
+	my $app_id = shift;
+	my $model  = shift;
+
+	unless ($self->valid_app($app_id)) {
+		Apache::Voodoo::Exception::Application->throw(
+			"Application id '$app_id' unknown. Valid ids are: ".join(",",$self->get_apps())
+		);
+	}
+
+	return $self->{'apps'}->{$app_id}->{'models'}->{$model};
 }
 
 sub execute_controllers {
@@ -387,6 +416,7 @@ sub execute_view {
 
 sub restart { 
 	my $self = shift;
+	my $app  = shift;
 
 	# wipe / initialize host information
 	$self->{'apps'} = {};
@@ -404,12 +434,14 @@ sub restart {
 	}
 
 	foreach my $id (readdir(DIR)) {
+		next if (defined($app) && $id ne $app);
+
 		next unless $id =~ /^[a-z]\w*$/i;
 		my $fp = File::Spec->catfile($install_path,$id,$cf_name);
 		next unless -f $fp;
 		next unless -r $fp;
 
-		warn "starting host $id\n";
+		warn "starting application $id\n";
 
 		my $app = Apache::Voodoo::Application->new($id,$self->{'constants'});
 

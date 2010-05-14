@@ -1,6 +1,6 @@
 package Apache::Voodoo::Session::MySQL;
 
-$VERSION = "3.0002";
+$VERSION = "3.0100";
 
 use strict;
 use warnings;
@@ -47,8 +47,6 @@ sub attach {
 		undef $id;
 		$obj = tie(%session,'Apache::Session::MySQL',$id, \%opts) || die "Tieing to session failed: $!";	
 	}
-
-	$self->{connected} = 1;
 
 	return Apache::Voodoo::Session::Instance->new($obj,\%session);
 }

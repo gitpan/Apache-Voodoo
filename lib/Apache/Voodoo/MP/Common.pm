@@ -1,12 +1,11 @@
 package Apache::Voodoo::MP::Common;
 
-$VERSION = "3.0002";
+$VERSION = "3.0100";
 
 use strict;
 use warnings;
 
 use Time::HiRes;
-use Data::Dumper;
 
 sub new {
 	my $class = shift;

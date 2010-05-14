@@ -1,6 +1,6 @@
 package Apache::Voodoo;
 
-$VERSION = "3.0002";
+$VERSION = "3.0100";
 
 use strict;
 use warnings;
@@ -225,7 +225,7 @@ sub mkurlparams {
 				push(@return, map { "$key=$_" } @{$h->{$key}} );
 			}
 			else {
-				push(@return,"$key=$h->{$key}") if length($h->{$key});
+				push(@return,"$key=$h->{$key}") if defined($h->{$key}) && length($h->{$key});
 			}
 		}
 	}
@@ -284,7 +284,7 @@ sub sanitize_text {
 
 sub trim {
 	my $self  = shift;
-	my $param = shift;
+	my $param = shift || "";
 
 	$param =~ s/^\s*//o;
 	$param =~ s/\s*$//o;

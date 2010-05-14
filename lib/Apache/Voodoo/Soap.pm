@@ -1,6 +1,6 @@
 package Apache::Voodoo::Soap;
 
-$VERSION = "3.0002";
+$VERSION = "3.0100";
 
 use strict;
 use warnings;
@@ -71,12 +71,11 @@ sub handler {
 	my $return;
 	if ($self->{mp}->is_get() && $r->unparsed_uri =~ /\?wsdl$/) {
 		my $uri = $self->{'mp'}->uri();
-		if ($uri =~ /\/$/) {
-			return $self->{mp}->not_found();
-		}
+
+		$uri =~ s/^\///;
+		$uri =~ s/\/$//;
 
 		# FIXME hack.  Shouldn't be looking in there to get this
-		$uri =~ s/^\///;
 		unless ($self->{'engine'}->{'run'}->{'app'}->{'controllers'}->{$uri}) {
 			return $self->{mp}->not_found();
 		}
@@ -100,7 +99,9 @@ sub handler {
 		};
 		if ($@) {
 			$self->{'mp'}->content_type('text/plain');
-			$self->{'mp'}->print("Error generating WDSL:\n\n$@");
+			my $s = "Error generating WSDL:\n\n$@";
+			$s =~ s/\^J/\n/g;
+			$self->{'mp'}->print($s);
 		}
 		else {
 			$self->{'mp'}->content_type('text/xml');
@@ -137,10 +138,10 @@ sub handle_request {
 	my $uri      = $self->{'mp'}->uri();
 	my $filename = $self->{'mp'}->filename();
 
-	if ($uri =~ /\/$/) {
-		$self->{status} = $self->{mp}->not_found();
-		$self->_client_fault($self->{mp}->not_found(),'No such service.');
-	}
+	# if the SOAP endpoint happens to overlap with a directory name
+	# libapr "helpfully" appends a / to the end of the uri and filenames.
+	$uri      =~ s/\/$//;
+	$filename =~ s/\/$//;
 
 	$filename =~ s/\.tmpl$//;
 	unless ($self->{'run'}->{'method'} eq 'handle') {
