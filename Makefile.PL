@@ -16,7 +16,6 @@ my %required_modules = (
 	'Exception::Class::DBI' => 1.00,
 	'File::Pid'             => 1.01,
 	'HTML::Template'        => 2.7,
-	'IPC::SharedCache'      => 1.3,
 	'JSON::DWIW'            => 0.32,
 	'Tie::Hash::Indexed'    => 0.05,    # Used by Table/Probe/MySQL.pm
 	'Time::HiRes'           => 1.65,
@@ -29,11 +28,12 @@ my %optionals = (
 	'Apache2::Request' => 2.08,
 	'Apache2::Cookie'  => 2.08,
 
-	'SOAP::Lite'       => 0.710,
+	'SOAP::Lite'            => 0.710,
+	'Data::Structure::Util' => 0.15,
 
 	'Pod::WSDL2'       => 0.06,	# prefer my forked version,
 	'Pod::WSDL'        => 0.05,	# fallback to the main one if it's not installed
-	
+
 	'Log::Log4Perl'    => 1.24
 );
 
@@ -90,6 +90,8 @@ else {
 }
 
 if ($required_modules{'SOAP::Lite'}) {
+	$required_modules{'Data::Structure::Util'} = $optionals{'Data::Structure::Util'};
+
 	eval { require Pod::WSDL2; };
 	if ($@) {
 		$required_modules{'Pod::WSDL'}  = $optionals{'Pod::WSDL'};

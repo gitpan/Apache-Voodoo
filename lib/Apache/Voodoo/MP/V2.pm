@@ -1,6 +1,6 @@
 package Apache::Voodoo::MP::V2;
 
-$VERSION = "3.0100";
+$VERSION = "3.0200";
 
 use strict;
 use warnings;
@@ -63,7 +63,7 @@ sub parse_params {
 	foreach ($apr->param) {
 		my @value = $apr->param($_);
 		$params{$_} = @value > 1 ? [@value] : $value[0];
-   	}
+	}
 
 	# make sure our internal special params don't show up in the parameter list.
 	delete $params{'__voodoo_file_upload__'};
@@ -91,7 +91,7 @@ sub parse_params {
 		}
 	}
 
-   	return \%params;
+	return \%params;
 }
 
 sub set_cookie {
@@ -113,8 +113,8 @@ sub set_cookie {
 	}
 
 	# I didn't use Apache2::Cookie's bake since it doesn't support setting the HttpOnly flag.
-	# The argument setting the flag goes something like "Not every browser supports it, 
-	# so what's the point?"  Which seems to me to be a bit like saying "What's the point 
+	# The argument setting the flag goes something like "Not every browser supports it,
+	# so what's the point?"  Which seems to me to be a bit like saying "What's the point
 	# in wearing this bullet proof vest if it doesn't stop a shell from a tank?"
 	$self->err_header_out('Set-Cookie' => "$c; HttpOnly");
 }
@@ -136,13 +136,21 @@ sub get_cookie {
 	}
 }
 
+sub register_cleanup {
+	my $self = shift;
+	my $obj  = shift;
+	my $sub  = shift;
+
+	$self->{'r'}->pool->cleanup_register($sub,$obj);
+}
+
 1;
 
 ################################################################################
-# Copyright (c) 2005-2010 Steven Edwards (maverick@smurfbane.org).  
+# Copyright (c) 2005-2010 Steven Edwards (maverick@smurfbane.org).
 # All rights reserved.
 #
-# You may use and distribute Apache::Voodoo under the terms described in the 
+# You may use and distribute Apache::Voodoo under the terms described in the
 # LICENSE file include in this package. The summary is it's a legalese version
 # of the Artistic License :)
 #

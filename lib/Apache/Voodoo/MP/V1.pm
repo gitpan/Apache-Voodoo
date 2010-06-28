@@ -1,6 +1,6 @@
 package Apache::Voodoo::MP::V1;
 
-$VERSION = "3.0100";
+$VERSION = "3.0200";
 
 use strict;
 use warnings;
@@ -57,7 +57,7 @@ sub parse_params {
 	foreach ($apr->param) {
 		my @value = $apr->param($_);
 		$params{$_} = @value > 1 ? [@value] : $value[0];
-   	}
+	}
 
 	# make sure our internal special params don't show up in the parameter list.
 	delete $params{'__voodoo_file_upload__'};
@@ -65,7 +65,7 @@ sub parse_params {
 
 	if ($apr->parse()) {
 		$params{'__voodoo_upload_error__'} = $apr->notes('error-notes');
-   	}
+	}
 	else {
 		my @uploads = $apr->upload;
 		if (@uploads) {
@@ -73,7 +73,7 @@ sub parse_params {
 		}
 	}
 
-   	return \%params;
+	return \%params;
 }
 
 sub set_cookie {
@@ -118,13 +118,21 @@ sub get_cookie {
 	}
 }
 
+sub register_cleanup {
+	my $self = shift;
+	my $obj  = shift;
+	my $sub  = shift;
+
+	$self->{'r'}->register_cleanup(sub { $obj->$sub });
+}
+
 1;
 
 ################################################################################
-# Copyright (c) 2005-2010 Steven Edwards (maverick@smurfbane.org).  
+# Copyright (c) 2005-2010 Steven Edwards (maverick@smurfbane.org).
 # All rights reserved.
 #
-# You may use and distribute Apache::Voodoo under the terms described in the 
+# You may use and distribute Apache::Voodoo under the terms described in the
 # LICENSE file include in this package. The summary is it's a legalese version
 # of the Artistic License :)
 #

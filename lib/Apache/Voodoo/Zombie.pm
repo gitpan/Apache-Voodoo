@@ -14,7 +14,7 @@ This is a development tool...you shouldn't have any Zombies in your production e
 =cut ################################################################################
 package Apache::Voodoo::Zombie;
 
-$VERSION = "3.0100";
+$VERSION = "3.0200";
 
 use strict;
 use warnings;
@@ -39,7 +39,7 @@ sub new {
 # Autoload is used to catch whatever method was supposed to be invoked
 # in the dead module.
 #
-sub AUTOLOAD { 
+sub AUTOLOAD {
 	next unless ref($_[0]);
 
 	my $self = shift;

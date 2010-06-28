@@ -1,6 +1,6 @@
 package Apache::Voodoo::Engine;
 
-$VERSION = "3.0100";
+$VERSION = "3.0200";
 
 use strict;
 use warnings;
@@ -43,7 +43,7 @@ sub new {
 
 	# Setup signal handler for die so that all deaths become exception objects
 	# This way we can get a stack trace from where the death occurred, not where it was caught.
-	$SIG{__DIE__} = sub { 
+	$SIG{__DIE__} = sub {
 		if (blessed($_[0]) && $_[0]->can("rethrow")) {
 			# Already died using an exception class, just pass it up the chain
 			$_[0]->rethrow;
@@ -73,7 +73,7 @@ sub get_apps {
 
 sub is_devel_mode {
 	my $self = shift;
-	return ($self->{'run'}->{'config'}->{'devel_mode'})?1:0;
+	return ($self->_app->config->{'devel_mode'})?1:0;
 }
 
 sub set_request {
@@ -86,6 +86,8 @@ sub init_app {
 
 	my $id = shift || $self->{'mp'}->get_app_id();
 
+	$self->{'app_id'} = $id;
+
 	unless (defined($id)) {
 		Apache::Voodoo::Exception::Application->throw(
 			"PerlSetVar ID not present in configuration.  Giving up."
@@ -94,28 +96,19 @@ sub init_app {
 
 	# app exists?
 	unless ($self->valid_app($id)) {
-		delete $self->{'run'};
 		Apache::Voodoo::Exception::Application->throw(
 			"Application id '$id' unknown. Valid ids are: ".join(",",$self->get_apps())
 		);
 	}
 
-	my $run = {};
-	$run->{'app_id'} = $id;
-	$run->{'app'}    = $self->{'apps'}->{$id};
-
-	if ($run->{'app'}->{'dynamic_loading'}) {
-		$run->{'app'}->refresh();
+	if ($self->_app->{'dynamic_loading'}) {
+		$self->_app->refresh();
 	}
 
-	if ($run->{'app'}->{'DEAD'}) {
+	if ($self->_app->{'DEAD'}) {
 		Apache::Voodoo::Exception::Application->throw("Application $id failed to load.");
 	}
 
-	$run->{'config'}    = $run->{'app'}->config();
-	$run->{'site_root'} = $self->{mp}->site_root();
-
-	$self->{'run'} = $run;
 
 	return 1;
 }
@@ -123,21 +116,21 @@ sub init_app {
 sub begin_run {
 	my $self = shift;
 
-	my $run = $self->{'run'};
-	my $app = $run->{'app'};
+	$self->{'mp'}->register_cleanup($self,\&finish);
 
 	# setup debugging
-	$debug = $app->{'debug_handler'};
+	$debug = $self->_app->{'debug_handler'};
 	$debug->init($self->{'mp'});
 	$debug->mark(Time::HiRes::time,"START");
 
-	$run->{'session_handler'} = $self->attach_session();
-	$run->{'session'} = $run->{'session_handler'}->session;
+	$self->{'dbh'} = $self->attach_db();
 
-	$debug->session_id($run->{'session_handler'}->{'id'});
+	$self->{'session_handler'} = $self->attach_session();
+	$self->{'session'} = $self->{'session_handler'}->session;
+
+	$debug->session_id($self->{'session_handler'}->{'id'});
 	$debug->mark(Time::HiRes::time,'Session Attachment');
 
-	$run->{'dbh'} = $self->attach_db();
 
 	$debug->mark(Time::HiRes::time,'DB Connect');
 
@@ -148,12 +141,12 @@ sub attach_db {
 	my $self = shift;
 
 	my $db = undef;
-	foreach (@{$self->{'run'}->{'app'}->databases}) {
+	foreach (@{$self->_app->databases}) {
 		eval {
 			$db = DBI->connect_cached(@{$_});
 		};
 		last if $db;
-	
+
 		Apache::Voodoo::Exception::DBIConnect->throw($DBI::errstr);
 	}
 
@@ -163,7 +156,7 @@ sub attach_db {
 sub parse_params {
 	my $self = shift;
 
-	my $params = $self->{mp}->parse_params($self->{'run'}->{'config'}->{'upload_size_max'});
+	my $params = $self->{mp}->parse_params($self->_app->config->{'upload_size_max'});
 	unless (ref($params)) {
 		Apache::Voodoo::Exception::ParamParse->throw($params);
 	}
@@ -178,47 +171,51 @@ sub status {
 	my $status = shift;
 
 	if (defined($debug)) {
-		$debug->session($self->{'run'}->{'session'});
 		$debug->status($status);
+		$debug->session($self->{'session'});
+	}
+
+	if (defined($self->_app) && defined($self->{'session_handler'})) {
+		if ($self->{'p'}->{'uri'} =~ /\/?logout(_[^\/]+)?$/) {
+			$self->{'mp'}->set_cookie($self->_app->config->{'cookie_name'},'!','now');
+			$self->{'session_handler'}->destroy();
+		}
+		else {
+			$self->{'session_handler'}->disconnect();
+		}
+		$debug->mark(Time::HiRes::time,'Session detachment');
 	}
 }
 
 sub finish {
-	my $self   = shift;
-	my $status = shift;
+	my $self = shift;
 
-	$self->status($status);
+	$debug->mark(Time::HiRes::time,'Cleaning up.');
 
-	if (defined($self->{'run'}) && defined($self->{'run'}->{'session_handler'})) {
-		if ($self->{'run'}->{'p'}->{'uri'} =~ /\/?logout(_[^\/]+)?$/) {
-			$self->{'mp'}->err_header_out("Set-Cookie" => $self->{'run'}->{'config'}->{'cookie_name'} . "='!'; path=/");
-			$self->{'run'}->{'session_handler'}->destroy();
-		}
-		else {
-			$self->{'run'}->{'session_handler'}->disconnect();
-		}
-	}
+	delete $self->{'app_id'};
+	delete $self->{'session_handler'};
+	delete $self->{'session'};
+	delete $self->{'p'};
+	delete $self->{'dbh'};
 
 	if (defined($debug)) {
 		$debug->mark(Time::HiRes::time,'END');
 		$debug->shutdown();
 	}
-
-	delete $self->{'run'};
 }
 
 sub attach_session {
 	my $self = shift;
 
-	my $app  = $self->{'run'}->{'app'};
-	my $conf = $self->{'run'}->{'config'};
+	my $conf = $self->_app->config;
 
 	my $session_id = $self->{'mp'}->get_cookie($conf->{'cookie_name'});
-	my $session = $app->{'session_handler'}->attach($session_id,$self->{'run'}->{'dbh'});
+
+	my $session = $self->_app->{'session_handler'}->attach($session_id,$self->{'dbh'});
 
 	if (!defined($session_id) || $session->id() ne $session_id) {
 		# This is a new session, or there was an old cookie from a previous sesion,
-		$self->{'mp'}->set_cookie($conf->{'cookie_name'},$session->{'id'});
+		$self->{'mp'}->set_cookie($conf->{'cookie_name'},$session->id());
 	}
 	elsif ($session->has_expired($conf->{'session_timeout'})) {
 		# the session has expired
@@ -242,7 +239,7 @@ sub history_capture {
 	my $uri    = shift;
 	my $params = shift;
 
-	my $session = $self->{'run'}->{'session'};
+	my $session = $self->{'session'};
 
 	$uri = "/".$uri if $uri !~ /^\//;
 
@@ -253,11 +250,11 @@ sub history_capture {
 		$session->{'history'}->[0]->{'uri'} ne $uri) {
 
 		# queue is empty or this is a new page
-		unshift(@{$session->{'history'}}, {'uri' => $uri, 'params' => $params});
+		unshift(@{$session->{'history'}}, {'uri' => $uri, 'params' => join("&",map { $_."=".$params->{$_} } keys %{$params})});
 	}
 	else {
 		# re-entrant call to page, update the params
-		$session->{'history'}->[0]->{'params'} = $params;
+		$session->{'history'}->[0]->{'params'} = join("&",map { $_."=".$params->{$_} } keys %{$params});
 	}
 
 	if (scalar(@{$session->{'history'}}) > 30) {
@@ -291,87 +288,88 @@ sub execute_controllers {
 	$uri =~ s/^\///;
 	$debug->url($uri);
 
-	my $run = $self->{'run'};
-	my $app = $self->{'run'}->{'app'};
+	my $app = $self->_app;
 
 	my $template_conf = $app->resolve_conf_section($uri);
 
 	$debug->mark(Time::HiRes::time,"config section resolution");
 	$debug->template_conf($template_conf);
 
-	$self->{'run'}->{'p'} = {
-		"dbh"           => $self->{'run'}->{'dbh'},
+	$self->{'p'} = {
+		"dbh"           => $self->{'dbh'},
 		"params"        => $params,
-		"session"       => $self->{'run'}->{'session'},
+		"session"       => $self->{'session'},
 		"template_conf" => $template_conf,
 		"mp"            => $self->{'mp'},
 		"uri"           => $uri,
 
 		# these are deprecated.  In the future get them from $p->{mp} or $p->{config}
-		"document_root" => $self->{'run'}->{'config'}->{'template_dir'},
-		"dir_config"    => $self->{mp}->dir_config,
-		"user-agent"    => $self->{mp}->header_in('User-Agent'),
-		"r"             => $self->{mp}->{r},
-		"themes"        => $self->{'run'}->{'config'}->{'themes'}
+		"document_root" => $self->_app->config->{'template_dir'},
+		"dir_config"    => $self->{'mp'}->dir_config,
+		"user-agent"    => $self->{'mp'}->header_in('User-Agent'),
+		"r"             => $self->{'mp'}->{'r'},
+		"themes"        => $self->_app->config->{'themes'}
 	};
 
 	my $template_params;
 
-	eval {
-		# call each of the pre_include modules followed by our page specific module followed by our post_includes
-		foreach my $c ( 
-			( map { [ $_, "handle"] } split(/\s*,\s*/o, $template_conf->{'pre_include'}  ||"") ),
-			$app->map_uri($uri),
-			( map { [ $_, "handle"] } split(/\s*,\s*/o, $template_conf->{'post_include'} ||"") )
-			) {
+	# call each of the pre_include modules followed by our page specific module followed by our post_includes
+	foreach my $c (
+		( map { [ $_, "handle"] } split(/\s*,\s*/o, $template_conf->{'pre_include'}  ||"") ),
+		$app->map_uri($uri),
+		( map { [ $_, "handle"] } split(/\s*,\s*/o, $template_conf->{'post_include'} ||"") )
+		) {
 
-			if (defined($app->{'controllers'}->{$c->[0]}) && $app->{'controllers'}->{$c->[0]}->can($c->[1])) {
-				my $obj    = $app->{'controllers'}->{$c->[0]};
-				my $method = $c->[1];
+		if (defined($app->{'controllers'}->{$c->[0]}) && $app->{'controllers'}->{$c->[0]}->can($c->[1])) {
+			my $obj    = $app->{'controllers'}->{$c->[0]};
+			my $method = $c->[1];
 
-				my $return = $obj->$method($self->{'run'}->{'p'});
+			my $return;
+			eval {
+				$return = $obj->$method($self->{'p'});
+			};
 
-				$debug->mark(Time::HiRes::time,"handler for ".$c->[0]." ".$c->[1]);
-				$debug->return_data($c->[0],$c->[1],$return);
+			$debug->mark(Time::HiRes::time,"handler for ".$c->[0]." ".$c->[1]);
+			$debug->return_data($c->[0],$c->[1],$return);
 
-				if (!defined($template_params) || !ref($return)) {
-					# first overwrites empty, or scalar overwrites previous
-					$template_params = $return;
+			if (my $e = Exception::Class->caught()) {
+				if (ref($e) =~ /(AccessDenied|Redirect|DisplayError)$/) {
+					$e->{'target'} = $self->_adjust_url($e->target);
+					$e->rethrow();
 				}
-				elsif (ref($return) eq "HASH" && ref($template_params) eq "HASH") {
-					# merge two hashes
-					foreach my $k ( keys %{$return}) {
-						$template_params->{$k} = $return->{$k};
-					}
-					$debug->mark(Time::HiRes::time,"result packing");
-				}
-				elsif (ref($return) eq "ARRAY" && ref($template_params) eq "ARRAY") {
-					# merge two arrays
-					push(@{$template_params},@{$return});
+				elsif (ref($e)) {
+					$e->rethrow();
 				}
 				else {
-					# eep.  can't merge.
-					Apache::Voodoo::Exception::RunTime::BadReturn->throw(
-						module  => $c->[0],
-						method  => $c->[1],
-						data    => $return
-					);
+					Apache::Voodoo::Exception::RunTime->throw("$@");
 				}
-
-				last if $self->{'run'}->{'p'}->{'_stop_chain_'};
 			}
-		}
-	};
-	if (my $e = Exception::Class->caught()) {
-		if (ref($e) =~ /(AccessDenied|Redirect|DisplayError)$/) {
-			$e->{'target'} = $self->_adjust_url($e->target);
-			$e->rethrow();
-		}
-		elsif (ref($e)) {
-			$e->rethrow();
-		}
-		else {
-			Apache::Voodoo::Exception::RunTime->throw("$@");
+
+			if (!defined($template_params) || !ref($return)) {
+				# first overwrites empty, or scalar overwrites previous
+				$template_params = $return;
+			}
+			elsif (ref($return) eq "HASH" && ref($template_params) eq "HASH") {
+				# merge two hashes
+				foreach my $k ( keys %{$return}) {
+					$template_params->{$k} = $return->{$k};
+				}
+				$debug->mark(Time::HiRes::time,"result packing");
+			}
+			elsif (ref($return) eq "ARRAY" && ref($template_params) eq "ARRAY") {
+				# merge two arrays
+				push(@{$template_params},@{$return});
+			}
+			else {
+				# eep.  can't merge.
+				Apache::Voodoo::Exception::RunTime::BadReturn->throw(
+					module  => $c->[0],
+					method  => $c->[1],
+					data    => $return
+				);
+			}
+
+			last if $self->{'p'}->{'_stop_chain_'};
 		}
 	}
 
@@ -383,28 +381,28 @@ sub execute_view {
 	my $content = shift;
 
 	my $view;
-	if (defined($self->{'run'}->{'p'}->{'_view_'}) && 
-		defined($self->{'run'}->{'app'}->{'views'}->{$self->{'run'}->{'p'}->{'_view_'}})) {
+	if (defined($self->{'p'}->{'_view_'}) &&
+		defined($self->_app->{'views'}->{$self->{'p'}->{'_view_'}})) {
 
-		$view = $self->{'run'}->{'app'}->{'views'}->{$self->{'run'}->{'p'}->{'_view_'}};
+		$view = $self->_app->{'views'}->{$self->{'p'}->{'_view_'}};
 	}
-	elsif (defined($self->{'run'}->{'template_conf'}->{'default_view'}) && 
-	       defined($self->{'run'}->{'app'}->{'views'}->{$self->{'run'}->{'template_conf'}->{'default_view'}})) {
+	elsif (defined($self->{'p'}->{'template_conf'}->{'default_view'}) &&
+	       defined($self->_app->{'views'}->{$self->{'p'}->{'template_conf'}->{'default_view'}})) {
 
-		$view = $self->{'run'}->{'app'}->{'views'}->{$self->{'run'}->{'template_conf'}->{'default_view'}};
-	}	
+		$view = $self->_app->{'views'}->{$self->{'p'}->{'template_conf'}->{'default_view'}};
+	}
 	else {
-		$view = $self->{'run'}->{'app'}->{'views'}->{'HTML'};
-	}	
+		$view = $self->_app->{'views'}->{'HTML'};
+	}
 
-	$view->begin($self->{'run'}->{'p'});
+	$view->begin($self->{'p'});
 
 	if (blessed($content) && $content->can('rethrow')) {
 		$view->exception($content);
 	}
 	else {
 		# pack up the params. note the presidence: module overrides template_conf
-		$view->params($self->{'run'}->{'template_conf'});
+		$view->params($self->{'p'}->{'template_conf'});
 		$view->params($content);
 	}
 
@@ -414,7 +412,7 @@ sub execute_view {
 	return $view;
 }
 
-sub restart { 
+sub restart {
 	my $self = shift;
 	my $app  = shift;
 
@@ -452,7 +450,7 @@ sub restart {
 				$dbh = DBI->connect(@{$_});
 			};
 			last if $dbh;
-			
+
 			warn "========================================================\n";
 			warn "DB CONNECT FAILED FOR $id\n";
 			warn $DBI::errstr."\n";
@@ -464,7 +462,7 @@ sub restart {
 		}
 
 		$self->{'apps'}->{$id} = $app;
-		
+
 		# notifiy of start errors
 		$self->{'apps'}->{$id}->{"DEAD"} = 0;
 
@@ -493,8 +491,9 @@ sub _adjust_url {
 	my $self = shift;
 	my $uri  = shift;
 
-	if ($self->{'run'}->{'site_root'} ne "/" && $uri =~ /^\//o) {
-		return $self->{'run'}->{'site_root'}.$uri;
+	my $sr = $self->{'mp'}->site_root();
+	if ($sr ne "/" && $uri =~ /^\//o) {
+		return $sr.$uri;
 	}
 	else {
 		return $uri;
@@ -502,13 +501,20 @@ sub _adjust_url {
 
 }
 
+sub _app {
+	my $self = shift;
+
+	return $self->{'apps'}->{$self->{'app_id'}};
+
+}
+
 1;
 
 ################################################################################
-# Copyright (c) 2005-2010 Steven Edwards (maverick@smurfbane.org).  
+# Copyright (c) 2005-2010 Steven Edwards (maverick@smurfbane.org).
 # All rights reserved.
 #
-# You may use and distribute Apache::Voodoo under the terms described in the 
+# You may use and distribute Apache::Voodoo under the terms described in the
 # LICENSE file include in this package. The summary is it's a legalese version
 # of the Artistic License :)
 #

@@ -1,6 +1,6 @@
 package Apache::Voodoo::Debug::Log4perl;
 
-$VERSION = "3.0100";
+$VERSION = "3.0200";
 
 use strict;
 use warnings;
@@ -83,15 +83,15 @@ sub exception { my $self = shift; $self->_get_logger->fatal($self->_dumper(@_));
 sub trace     { my $self = shift; $self->_get_logger->trace($self->_dump_trace(@_)); }
 sub table     { my $self = shift; $self->_get_logger->debug($self->_dump_table(@_)); }
 
-sub return_data   { my $self = shift; $self->_get_logger('ReturnData'  )->debug($self->_dumper(@_)); }
-sub url           { my $self = shift; $self->_get_logger('Url'         )->debug($self->_dumper(@_)); }
-sub status        { my $self = shift; $self->_get_logger('Status'      )->debug($self->_dumper(@_)); }
-sub params        { my $self = shift; $self->_get_logger('Params'      )->debug($self->_dumper(@_)); }
-sub template_conf { my $self = shift; $self->_get_logger('TemplateConf')->debug($self->_dumper(@_)); }
-sub session       { my $self = shift; $self->_get_logger('Session'     )->debug($self->_dumper(@_)); }
+sub return_data   { my $self = shift; $self->_get_logger('ReturnData'  )->trace($self->_dumper(@_)); }
+sub url           { my $self = shift; $self->_get_logger('Url'         )->trace($self->_dumper(@_)); }
+sub status        { my $self = shift; $self->_get_logger('Status'      )->trace($self->_dumper(@_)); }
+sub params        { my $self = shift; $self->_get_logger('Params'      )->trace($self->_dumper(@_)); }
+sub template_conf { my $self = shift; $self->_get_logger('TemplateConf')->trace($self->_dumper(@_)); }
+sub session       { my $self = shift; $self->_get_logger('Session'     )->trace($self->_dumper(@_)); }
 
-sub mark { 
-	my $self = shift; 
+sub mark {
+	my $self = shift;
 
 	push(@{$self->{profile}},[@_]);
 }
@@ -99,7 +99,7 @@ sub mark {
 sub shutdown {
 	my $self = shift;
 
-	my @d = $self->{profile};
+	my @d = @{$self->{profile}};
 	my $last = $#d;
 	if ($last > 0) {
 		my $total_time = $d[$last]->[0] - $d[0]->[0];
@@ -114,7 +114,7 @@ sub shutdown {
 
 		unshift(@return, [
 			sprintf("%.5f",$total_time),
-			'percent', 
+			'percent',
 			'message'
 		]);
 
@@ -233,10 +233,10 @@ sub _mk_table {
 1;
 
 ################################################################################
-# Copyright (c) 2005-2010 Steven Edwards (maverick@smurfbane.org).  
+# Copyright (c) 2005-2010 Steven Edwards (maverick@smurfbane.org).
 # All rights reserved.
 #
-# You may use and distribute Apache::Voodoo under the terms described in the 
+# You may use and distribute Apache::Voodoo under the terms described in the
 # LICENSE file include in this package. The summary is it's a legalese version
 # of the Artistic License :)
 #

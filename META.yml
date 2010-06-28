@@ -1,7 +1,7 @@
 --- #YAML:1.0
 name:               Apache-Voodoo
-version:            3.0100
-abstract:           or just Voodoo for short; is a web application framework 
+version:            3.0200
+abstract:           or just Voodoo for short; is a web application framework
 author:
     - Maverick Edwards <maverick@smurfbane.org>
 license:            unknown
@@ -16,6 +16,7 @@ requires:
     Apache::Session:      1.6
     Config::General:      2.27
     CPAN:                 1.9205
+    Data::Structure::Util:  0.15
     DBI:                  1.609
     Devel::StackTrace:    1.2
     Digest::MD5:          2.36
@@ -24,7 +25,6 @@ requires:
     Exception::Class::DBI:  1
     File::Pid:            1.01
     HTML::Template:       2.7
-    IPC::SharedCache:     1.3
     JSON::DWIW:           0.32
     Log::Log4perl:        ~
     Pod::WSDL:            0.05
@@ -36,7 +36,7 @@ no_index:
     directory:
         - t
         - inc
-generated_by:       ExtUtils::MakeMaker version 6.55_02
+generated_by:       ExtUtils::MakeMaker version 6.56
 meta-spec:
     url:      http://module-build.sourceforge.net/META-spec-v1.4.html
     version:  1.4
